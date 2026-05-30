@@ -1,0 +1,49 @@
+project:
+  name: "llm_playground"
+  version: "1.0.0"
+  seed: 42
+
+data:
+  raw_data_dir: "./data/raw"
+  processed_data_dir: "./data/processed"
+  tokenized_data_dir: "./data/tokenized"
+  max_sequence_length: 2048
+  
+crawling:
+  common_crawl:
+    base_url: "https://data.commoncrawl.org"
+    num_segments: 5
+    max_pages_per_segment: 10000
+  web_crawler:
+    max_depth: 3
+    max_pages: 5000
+    delay: 1.0
+    
+cleaning:
+  min_length: 100
+  max_length: 100000
+  min_quality_score: 0.5
+  languages: ["en"]
+  
+tokenization:
+  vocab_size: 50257
+  min_frequency: 2
+  special_tokens:
+    pad_token: "<|pad|>"
+    eos_token: "<|endoftext|>"
+    bos_token: "<|startoftext|>"
+    unk_token: "<|unk|>"
+
+model:
+  architecture: "gpt"
+  hidden_size: 768
+  num_layers: 12
+  num_heads: 12
+  intermediate_size: 3072
+  max_position_embeddings: 2048
+  vocab_size: 50257
+  dropout: 0.1
+  
+logging:
+  level: "INFO"
+  wandb_project: "llm_playground"

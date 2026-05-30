@@ -1,0 +1,42 @@
+evaluation:
+  output_dir: "./evaluation_results"
+  batch_size: 16
+  max_samples: 1000
+  device: "cuda"
+
+perplexity:
+  max_length: 1024
+  stride: 512
+  batch_size: 4
+
+bleu:
+  max_n: 4
+  smoothing: true
+
+rouge:
+  variants: ["rouge1", "rouge2", "rougeL"]
+
+benchmarks:
+  mmlu:
+    data_dir: "./data/benchmarks/mmlu"
+    num_few_shot: 5
+    subjects: "all"
+  gsm8k:
+    data_dir: "./data/benchmarks/gsm8k"
+    num_few_shot: 8
+    max_eval_samples: 500
+    chain_of_thought: true
+  hellaswag:
+    data_dir: "./data/benchmarks/hellaswag"
+    num_few_shot: 10
+
+human_eval:
+  storage_path: "./data/human_eval"
+  elo_k_factor: 32.0
+  initial_elo: 1000.0
+  min_comparisons_for_ranking: 10
+
+leaderboard:
+  update_interval: 3600
+  min_battles: 100
+  confidence_level: 0.95
