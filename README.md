@@ -1915,4 +1915,3 @@ starring the repository.*
 [📧 Contact](mailto:team@llm-playground.ai)
 
 </div>
-```
