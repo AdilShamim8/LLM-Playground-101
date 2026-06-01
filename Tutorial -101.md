@@ -288,7 +288,7 @@ Let me give you context on **how we got here**:
 
 ---
 
-# 🔨 PART 2: Pre-Training
+# PART 2: Pre-Training
 
 ---
 
@@ -4315,4 +4315,4 @@ BLOGS:
 
 Every concept you need to understand — from raw web crawling to human evaluation leaderboards — is covered here from first principles.
 
-**Next step:** When you're ready, we can move to the practical/implementation side of building your actual LLM Playground! 🚀
+**Next step:** When you're ready, we can move to the practical/implementation side of building your actual LLM Playground!
