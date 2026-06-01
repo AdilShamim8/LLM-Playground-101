@@ -37,7 +37,7 @@ PART 4: Evaluation
 
 ---
 
-# 🎯 PART 0: What Are We Building and Why?
+#  PART 0: What Are We Building and Why?
 
 ---
 
