@@ -113,7 +113,7 @@ Now let's go through **each of these steps** in extreme detail.
 
 ---
 
-# 🧠 PART 1: LLM Overview and Foundations
+# PART 1: LLM Overview and Foundations
 
 ---
 
