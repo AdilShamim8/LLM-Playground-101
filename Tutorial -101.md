@@ -1,11 +1,6 @@
 # Complete Project 1: Build an LLM Playground Tutorial — From Zero to Deep Understanding
 
-## Full Beginner-to-Advanced Theory Guide
-
----
-
-> **Before we start, one important promise:**
-> I will explain EVERYTHING from zero. No skipping. No assuming. If something feels confusing, we slow down. Think of this as your complete LLM textbook — but written like a conversation with a senior engineer.
+> ### Full Beginner-to-Advanced Theory Guide
 
 ---
 
