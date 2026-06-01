@@ -1,4 +1,4 @@
-# 🚀 Complete LLM Playground Tutorial — From Zero to Deep Understanding
+# Complete Project 1: Build an LLM Playground Tutorial — From Zero to Deep Understanding
 
 ## Full Beginner-to-Advanced Theory Guide
 
@@ -9,7 +9,7 @@
 
 ---
 
-# 📚 TABLE OF CONTENTS
+# TABLE OF CONTENTS
 
 ```
 PART 0: What Are We Building and Why?
