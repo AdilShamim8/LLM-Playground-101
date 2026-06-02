@@ -1904,16 +1904,41 @@ included in all copies or substantial portions of the Software.
 
 ---
 
+## Contact
+
+- Website: [Adil Shamim](https://adilshamim.me/)
+- GitHub: [Adil Shamim](https://github.com/AdilShamim8)
+- Create an issue in this repository for questions or suggestions
+
+---
+
+<p align="center">
+  <a href="https://github.com/AdilShamim8">
+    <img src="https://img.shields.io/badge/GitHub-AdilShamim8-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Profile"/>
+  </a>
+  <span style="opacity:.6">&nbsp;</span>
+
+  <a href="https://www.linkedin.com/in/adilshamim8">
+    <img src="https://img.shields.io/badge/LinkedIn-AdilShamim8-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn Profile"/>
+  </a>
+  <span style="opacity:.6">&nbsp;</span>
+
+  <a href="https://www.kaggle.com/adilshamim8">
+    <img src="https://img.shields.io/badge/Kaggle-AdilShamim8-20BEFF?style=for-the-badge&logo=kaggle&logoColor=white" alt="Kaggle Profile"/>
+  </a>
+  <span style="opacity:.6">&nbsp;</span>
+
+  <a href="https://x.com/adil_shamim8">
+    <img src="https://img.shields.io/badge/Twitter%2FX-@adil__shamim8-000000?style=for-the-badge&logo=x&logoColor=white" alt="Twitter/X Profile"/>
+  </a>
+  <span style="opacity:.6">&nbsp;</span>
+
+  <a href="https://adilshamim8.medium.com/">
+    <img src="https://img.shields.io/badge/Medium-AdilShamim8-12100E?style=for-the-badge&logo=medium&logoColor=white" alt="Medium Profile"/>
+  </a>
+</p>
 <div align="center">
-
-**Built with ❤️ for the research and engineering community**
-
-*If this project helped your research, please consider citing it or
-starring the repository.*
-
-[⭐ Star on GitHub](https://github.com/your-org/llm-playground) •
-[🐛 Report Bug](https://github.com/your-org/llm-playground/issues) •
-[💡 Request Feature](https://github.com/your-org/llm-playground/discussions) •
-[📧 Contact](mailto:team@llm-playground.ai)
+  
+⭐ **If you find this repository helpful, please consider giving it a star!** ⭐
 
 </div>
