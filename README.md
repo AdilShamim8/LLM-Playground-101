@@ -44,7 +44,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Overview](#-overview)
 2. [What Makes This Different](#-what-makes-this-different)
@@ -74,7 +74,7 @@
 
 ---
 
-## 🔭 Overview
+## Overview
 
 **LLM Playground** is a production-grade framework implementing the complete
 lifecycle of a Large Language Model from first principles. Every component —
@@ -120,7 +120,7 @@ Raw Web Data
 
 ---
 
-## ✨ What Makes This Different
+## What Makes This Different
 
 Most LLM repositories either wrap an existing framework (HuggingFace,
 LitGPT) or implement only one piece of the puzzle. This project is different:
@@ -142,7 +142,7 @@ LitGPT) or implement only one piece of the puzzle. This project is different:
 
 ---
 
-## 💻 System Requirements
+## System Requirements
 
 ### Minimum (Development / CPU)
 ```
@@ -182,7 +182,7 @@ CUDA:   12.1+
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Option 1: Docker (Recommended — 3 Commands)
 
@@ -399,7 +399,7 @@ llm_playground/
 
 ---
 
-## 🏗️ Architecture Deep Dive
+## Architecture Deep Dive
 
 ### Data Pipeline
 
@@ -912,7 +912,7 @@ results = generator.batch_generate(
 
 ---
 
-## 🎯 Training Pipeline
+## Training Pipeline
 
 ### 1. Pre-Training
 
@@ -1216,7 +1216,7 @@ print(f"Reward: {result.reward}")  # 1.0 for valid JSON
 
 ---
 
-## 📊 Evaluation & Benchmarks
+## Evaluation & Benchmarks
 
 ### Automated Metrics
 
@@ -1319,7 +1319,7 @@ Properties:
 
 ---
 
-## 🌐 API Reference
+## API Reference
 
 The API is fully compatible with the OpenAI Chat Completions specification.
 
@@ -1492,7 +1492,7 @@ for token in client.stream([{"role": "user", "content": "Tell me a story"}]):
 
 ---
 
-## 🖥️ UI Guide
+## UI Guide
 
 Launch the Gradio interface:
 
@@ -1641,7 +1641,7 @@ docker-compose down
 
 ---
 
-## ⚡ Performance & Scaling
+## Performance & Scaling
 
 ### Single GPU Optimizations
 
@@ -1692,7 +1692,7 @@ deepspeed --num_gpus=8 training/pretrain.py \
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Installation Issues
 
@@ -1769,7 +1769,7 @@ python run_verification.py
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions at every level.
 
@@ -1814,7 +1814,7 @@ pytest tests/ -v
 
 ---
 
-## 📚 References
+## References
 
 ### Papers
 
