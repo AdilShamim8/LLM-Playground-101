@@ -188,7 +188,7 @@ CUDA:   12.1+
 
 ```bash
 # Clone
-git clone https://github.com/your-org/llm-playground.git
+git clone [https://github.com/your-org/llm-playground.git](https://github.com/AdilShamim8/LLM-Playground-101.git)
 cd llm-playground
 
 # Configure
