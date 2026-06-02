@@ -31,6 +31,9 @@
 
 <br/>
 
+# To better understand this project, first visit this link for a visualization of the project and what we built: https://llmplayground.space-z.ai/
+# Then, if you want to learn each topic in a tutorial format, read this file thoroughly: https://github.com/AdilShamim8/LLM-Playground-101/blob/main/Tutorial%20-101.md
+
 [**Quick Start**](#-quick-start) •
 [**Architecture**](#-architecture-deep-dive) •
 [**Training**](#-training-pipeline) •
