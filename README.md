@@ -210,7 +210,7 @@ Services will be available at:
 
 ```bash
 # 1. Clone and enter
-git clone https://github.com/your-org/llm-playground.git
+git clone https://github.com/AdilShamim8/LLM-Playground-101.git
 cd llm-playground
 
 # 2. Create isolated environment
