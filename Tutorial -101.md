@@ -1,6 +1,6 @@
 # Complete Tutorial Project 2: Build an LLM Playground 
 
-> ### Full Beginner-to-Advanced Theory Guide
+> ### The Most Beginner-Friendly, End-to-End, Deep Tutorial — DEFINITIVE VERSION
 
 ---
 
