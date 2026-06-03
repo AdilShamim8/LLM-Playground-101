@@ -28,8 +28,8 @@
 > from raw web data through pre-training, instruction tuning, reinforcement
 > learning from human feedback, and production API deployment.
 > Built for engineers who want to understand and build every layer themselves.
-> ### To better understand this project, first visit this link for a visualization of the project and what we built: [Link](https://llmplayground.space-z.ai/)
-> ### Then, if you want to learn each topic in a tutorial format, read this file thoroughly: [Link](https://github.com/AdilShamim8/Customer-Support-Chatbot-102/blob/main/Tutorial-102.md)
+> ### To better understand this project, first visit this link for a visualization of the project and what we built: [Link](https://ragchatbot1.space-z.ai/)
+> ### Then, if you want to learn each topic in a tutorial format, read this file thoroughly: [Link](https://github.com/AdilShamim8/LLM-Playground-101/blob/main/Tutorial%20-101.md)
 
 <br/>
 
