@@ -4187,7 +4187,7 @@ This is one of the most active research areas in AI.
 
 ---
 
-# 🎯 Complete Summary — The LLM Journey
+# Complete Summary — The LLM Journey
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -4239,7 +4239,7 @@ This is one of the most active research areas in AI.
 
 ---
 
-# 🔑 Key Takeaways for Your LLM Playground Project
+# Key Takeaways for Your LLM Playground Project
 
 ```
 1. DATA IS KING
@@ -4273,7 +4273,7 @@ This is one of the most active research areas in AI.
 
 ---
 
-# 📖 Resources for Deep Learning
+# Resources for Deep Learning
 
 ```
 PAPERS (must-read):
