@@ -1,6 +1,6 @@
 <div align="center">
 
-# Project 1 - Build an LLM Playground 101
+# Project 1 - Build an LLM Playground 
 
 ### Production-Level Large Language Model Training & Deployment Framework
 
