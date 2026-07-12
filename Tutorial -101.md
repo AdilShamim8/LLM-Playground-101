@@ -1,4 +1,4 @@
-# Complete Tutorial Project 2: Build an LLM Playground 
+# Complete Tutorial Project 1: Build an LLM Playground 
 
 > ### The Most Beginner-Friendly, End-to-End, Deep Tutorial — DEFINITIVE VERSION
 
