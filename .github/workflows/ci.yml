@@ -95,18 +95,17 @@ jobs:
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: ${{ runner.os }}-pip-
 
-      - name: Install CPU-only PyTorch
+      - name: Install dependencies
+        # Install numpy FIRST (before torch) because torch 2.1.0 needs
+        # numpy < 2.0. If numpy 2.x is installed, torch fails with
+        # "Numpy is not available" at runtime.
+        # We pin numpy<2.0 for torch 2.1.0 compatibility.
         run: |
           pip install --upgrade pip
+          pip install "numpy<2.0"
           # CPU-only PyTorch: ~200MB vs ~2GB for CUDA version
           pip install torch==2.1.0 --index-url https://download.pytorch.org/whl/cpu
-
-      - name: Install test dependencies
-        # Only install what the core tests need. The full requirements.txt
-        # includes flash-attn and deepspeed which need system compilers.
-        run: |
-          pip install pytest pytest-cov pytest-asyncio
-          pip install pyyaml loguru numpy
+          pip install pytest pytest-cov pytest-asyncio pyyaml loguru
 
       - name: Install package
         run: pip install -e . --no-deps
