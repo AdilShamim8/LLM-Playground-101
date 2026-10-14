@@ -10,7 +10,7 @@ Production-ready with:
 import os
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import HTTPException, Request, Security
@@ -25,13 +25,47 @@ except ImportError:
     JOSE_AVAILABLE = False
     logger.warning("jose/passlib not installed. Auth disabled.")
 
-SECRET_KEY = os.getenv(
-    "JWT_SECRET_KEY", "dev-secret-change-in-production"
-)
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+# ── Environment-based configuration ────────────────────────────────────
+#
+# SECURITY: We do NOT provide a fallback default for JWT_SECRET_KEY.
+# If the env var is missing, the app should fail to start in production.
+# A hardcoded default secret is how APIs get hacked — anyone who reads
+# the public repo knows the secret and can forge JWT tokens.
+#
+# The only exception is DEV_MODE, where a known dev secret is acceptable
+# for local development. In production, DEV_MODE must be false.
 
-# Rate limiting config
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+if DEV_MODE:
+    # In dev mode only, use a non-secret placeholder.
+    # This NEVER runs in production because we check ENVIRONMENT below.
+    SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-only-not-for-production")
+    if ENVIRONMENT == "production":
+        raise RuntimeError(
+            "FATAL: DEV_MODE=true in production. "
+            "Set DEV_MODE=false and provide JWT_SECRET_KEY."
+        )
+else:
+    SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+    if not SECRET_KEY:
+        raise RuntimeError(
+            "FATAL: JWT_SECRET_KEY environment variable is not set. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
+    if len(SECRET_KEY) < 32:
+        raise RuntimeError(
+            "FATAL: JWT_SECRET_KEY must be at least 32 characters. "
+            "Current length: " + str(len(SECRET_KEY))
+        )
+
+ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(
+    os.getenv("JWT_EXPIRE_MINUTES", "1440")  # 24 hours
+)
+
+# Rate limiting config (per-user, per-window)
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "3600"))
 
@@ -41,15 +75,27 @@ if JOSE_AVAILABLE:
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-# ── In-memory stores (use Redis in production) ────────────────────
+# ── In-memory stores ───────────────────────────────────────────────────
+#
+# WARNING: These are process-local. In production with multiple workers
+# or multiple servers, use Redis instead. See docs/PRODUCTION_DEPLOYMENT.md.
+#
+# API keys should be loaded from a database or vault, NOT hardcoded.
+# In dev mode, we allow a dev key for convenience. In production, the
+# _api_keys dict starts empty and must be populated via an admin API.
 
-_api_keys: dict[str, dict] = {
-    "dev-key-123": {
+_api_keys: dict[str, dict] = {}
+if DEV_MODE:
+    _api_keys["dev-key-123"] = {
         "user_id": "dev",
         "role": "admin",
-        "created_at": time.time()
+        "created_at": time.time(),
     }
-}
+    logger.warning(
+        "DEV_MODE is ON — a hardcoded dev API key is active. "
+        "NEVER use this in production."
+    )
+
 _rate_limit_store: dict[str, list[float]] = defaultdict(list)
 _revoked_tokens: set[str] = set()
 
@@ -76,7 +122,9 @@ def create_access_token(
         return "dev-token"
 
     to_encode = data.copy()
-    expire = datetime.utcnow() + (
+    # datetime.utcnow() is deprecated in Python 3.12+.
+    # Use timezone-aware datetime instead.
+    expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire})
@@ -124,8 +172,10 @@ async def get_current_user(
     FastAPI dependency for authenticated routes.
     Supports Bearer JWT tokens and API keys.
     """
-    # Allow all in dev mode
-    if os.getenv("DEV_MODE", "true").lower() == "true":
+    # In dev mode, skip authentication for convenience.
+    # The DEV_MODE flag is checked at import time (see above) and will
+    # raise RuntimeError if ENVIRONMENT=production.
+    if DEV_MODE:
         return {"user_id": "dev", "role": "admin"}
 
     if not credentials:
