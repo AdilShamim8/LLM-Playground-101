@@ -1,66 +1,84 @@
-# Core ML
-torch>=2.1.0
-torchvision>=0.16.0
-transformers>=4.36.0
-datasets>=2.15.0
-tokenizers>=0.15.0
-accelerate>=0.25.0
-peft>=0.7.0
-trl>=0.7.4
+# ═══════════════════════════════════════════════════════════════════════
+#  requirements.txt — Pinned Dependencies
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  WHY EXACT VERSIONS?
+#  Using >= means 'pip install' can resolve to different versions on
+#  different days. A dependency update can break the build silently.
+#  Exact pinning ensures reproducible environments across dev, CI, and
+#  production. This is standard practice for production codebases.
+#
+#  To update a package, change the version here and run pip install again.
+#  For complex dependency trees, use 'pip-compile' or 'uv pip compile'.
+#
+#  NOTE: PyTorch is installed separately in the Dockerfile with CUDA support.
+#  See Dockerfile for the torch install command.
+#
 
-# Data Processing
-numpy>=1.24.0
-pandas>=2.0.0
-scipy>=1.11.0
-scikit-learn>=1.3.0
-nltk>=3.8.0
-spacy>=3.7.0
-beautifulsoup4>=4.12.0
-requests>=2.31.0
-aiohttp>=3.9.0
-warcio>=1.7.4
-trafilatura>=1.6.0
-langdetect>=1.0.9
-fasttext-langdetect>=1.0.3
+# ─── Core ML ─────────────────────────────────────────────────────────────
+torch==2.1.0            # Installed via CUDA index in Dockerfile
+torchvision==0.16.0
+transformers==4.36.2
+datasets==2.16.1
+tokenizers==0.15.2
+accelerate==0.25.0
+peft==0.7.1
+trl==0.7.4
 
-# Training & Optimization
-deepspeed>=0.12.0
-flash-attn>=2.4.0
-bitsandbytes>=0.41.0
-wandb>=0.16.0
-tensorboard>=2.15.0
+# ─── Data Processing ─────────────────────────────────────────────────────
+numpy==1.26.4           # 1.26+ needed for Python 3.12 support
+pandas==2.1.4
+scipy==1.11.4
+scikit-learn==1.3.2
+nltk==3.8.1
+spacy==3.7.2
+beautifulsoup4==4.12.2
+requests==2.31.0
+aiohttp==3.9.1
+warcio==1.7.4
+trafilatura==1.6.1
+langdetect==1.0.9
+fasttext-langdetect==1.0.3
 
-# API & Serving
-fastapi>=0.104.0
-uvicorn>=0.24.0
-pydantic>=2.5.0
-httpx>=0.25.0
-python-jose>=3.3.0
-passlib>=1.7.4
-python-multipart>=0.0.6
+# ─── Training & Optimization ─────────────────────────────────────────────
+# deepspeed and flash-attn are installed separately (they need system deps)
+deepspeed==0.12.3       # Optional: multi-GPU training
+# flash-attn==2.4.0     # Optional: install with --no-build-isolation
+bitsandbytes==0.41.1
+wandb==0.16.2
+tensorboard==2.15.1
 
-# Evaluation
-rouge-score>=0.1.2
-sacrebleu>=2.3.0
-bert-score>=0.3.13
-evaluate>=0.4.0
-lm-eval>=0.4.0
+# ─── API & Serving ───────────────────────────────────────────────────────
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.3
+httpx==0.25.2
+python-jose==3.3.0
+passlib==1.7.4
+python-multipart==0.0.6
+bcrypt==4.1.2           # Explicit bcrypt version for passlib
 
-# UI
-gradio>=4.7.0
-streamlit>=1.28.0
+# ─── Evaluation ──────────────────────────────────────────────────────────
+rouge-score==0.1.2
+sacrebleu==2.4.0
+bert-score==0.3.13
+evaluate==0.4.1
+# lm-eval==0.4.0        # Optional: heavy dependency, install if needed
 
-# Infrastructure
-redis>=5.0.0
-celery>=5.3.0
-sqlalchemy>=2.0.0
-alembic>=1.12.0
-psycopg2-binary>=2.9.0
+# ─── UI ──────────────────────────────────────────────────────────────────
+gradio==4.12.0
 
-# Utilities
-pyyaml>=6.0.0
-python-dotenv>=1.0.0
-loguru>=0.7.0
-tqdm>=4.66.0
-click>=8.1.0
-rich>=13.7.0
+# ─── Infrastructure ──────────────────────────────────────────────────────
+redis==5.0.1
+celery==5.3.6
+sqlalchemy==2.0.23
+alembic==1.13.0
+psycopg2-binary==2.9.9
+
+# ─── Utilities ───────────────────────────────────────────────────────────
+pyyaml==6.0.1
+python-dotenv==1.0.0
+loguru==0.7.2
+tqdm==4.66.1
+click==8.1.7
+rich==13.7.0
