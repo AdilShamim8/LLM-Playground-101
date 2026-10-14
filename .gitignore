@@ -1,0 +1,149 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  .gitignore — Prevents accidental commits of secrets, data, and artifacts
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  WHY THIS FILE MATTERS:
+#  Without .gitignore, running `git add .` will commit:
+#    - .env files (containing API keys, database passwords)
+#    - Model checkpoints (hundreds of MB to GB)
+#    - Training data (potentially copyrighted or sensitive)
+#    - Python bytecode caches (noise in diffs)
+#    - Virtual environments (thousands of files)
+#
+#  A senior engineer never pushes secrets to a repo. This file is the
+#  first line of defense.
+#
+
+# ─── Secrets & Environment Files ────────────────────────────────────────
+# NEVER commit .env files — they contain live credentials.
+# The .env.example file IS committed (it has placeholder values only).
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+*.env
+
+# ─── Model Checkpoints & Weights ────────────────────────────────────────
+# These can be hundreds of MB to GB. Use model registries (HuggingFace Hub,
+# MLflow, S3) for distribution — not git.
+checkpoints/
+*.pt
+*.bin
+*.safetensors
+*.gguf
+*.ggml
+*.onnx
+*.ckpt
+
+# ─── Training Data ──────────────────────────────────────────────────────
+# Raw and processed data should live in object storage (S3/GCS), not git.
+data/raw/
+data/processed/
+data/tokenized/
+data/split/
+data/sft/
+data/preference/
+data/ppo_prompts.txt
+*.jsonl
+*.parquet
+*.arrow
+!data/**/__init__.py
+
+# ─── Tokenizer Files ────────────────────────────────────────────────────
+# Trained tokenizers are binary artifacts — distribute via HuggingFace Hub.
+tokenizers/
+
+# ─── Python Bytecode & Caches ───────────────────────────────────────────
+# These are generated automatically. Never commit them.
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ─── Virtual Environments ────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ─── Testing & Coverage ─────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ─── Type Checking & Linting ────────────────────────────────────────────
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.dmypy.json
+dmypy.json
+
+# ─── Jupyter Notebooks ──────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ─── IDE & Editor Files ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+
+# ─── Logs ───────────────────────────────────────────────────────────────
+logs/
+*.log
+*.out
+*.err
+
+# ─── Docker ─────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── Weights & Biases / MLflow ──────────────────────────────────────────
+wandb/
+mlruns/
+mlartifacts/
+
+# ─── TensorBoard ───────────────────────────────────────────────────────
+runs/
+events.out.tfevents.*
+
+# ─── OS Files ───────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
