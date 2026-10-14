@@ -1,6 +1,27 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  docker-compose.yml — LLM Playground (Development Environment)
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  This file is for LOCAL DEVELOPMENT only.
+#  For production, use Kubernetes or a managed container service.
+#  See docs/PRODUCTION_DEPLOYMENT.md for the production architecture.
+#
+#  Security notes:
+#  - Database passwords are read from .env, not hardcoded here.
+#  - Services have healthchecks so docker knows when they're ready.
+#  - The API service waits for postgres and redis to be healthy
+#    before starting (depends_on + condition: service_healthy).
+#
+#  Beginner note: The ${VAR:-default} syntax means "use the env var VAR,
+#  or 'default' if not set". The ${VAR:?msg} syntax means "use VAR, or
+#  fail with this error message if not set" — this prevents silent
+#  misconfigurations.
+#
+
 version: "3.9"
 
 services:
+  # ─── API Server ───────────────────────────────────────────────────────
   api:
     build:
       context: .
@@ -10,6 +31,8 @@ services:
     volumes:
       - ./checkpoints:/app/checkpoints
       - ./data:/app/data
+    env_file:
+      - .env
     environment:
       - CUDA_VISIBLE_DEVICES=0
       - PYTHONUNBUFFERED=1
@@ -26,42 +49,86 @@ services:
       --port 8000
       --workers 1
       --loop asyncio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - llm_net
 
+  # ─── Gradio UI ────────────────────────────────────────────────────────
   ui:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "7860:7860"
-    depends_on:
-      - api
+    env_file:
+      - .env
     environment:
       - API_BASE=http://api:8000/api/v1
     command: python ui/app.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - llm_net
 
+  # ─── Redis (rate limiting, caching, Celery broker) ───────────────────
+  # In production, use Redis Cluster or a managed service (ElastiCache).
   redis:
     image: redis:7-alpine
+    # maxmemory + LRU eviction prevents Redis from consuming all RAM
+    # if rate-limit entries grow unexpectedly.
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
     networks:
       - llm_net
 
+  # ─── PostgreSQL (users, API keys, conversation logs) ─────────────────
+  # In production, use a managed database (RDS, Cloud SQL) with automated
+  # backups, point-in-time recovery, and read replicas.
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: llm_user
-      POSTGRES_PASSWORD: llm_password
-      POSTGRES_DB: llm_playground
+      # ${VAR:-default}: use env var, or default if not set
+      # ${VAR:?msg}: use env var, or FAIL with message if not set
+      # The :? syntax for password prevents silent startup with empty password.
+      POSTGRES_USER: ${POSTGRES_USER:-llm_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}
+      POSTGRES_DB: ${POSTGRES_DB:-llm_playground}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-llm_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
     networks:
       - llm_net
 
