@@ -7,10 +7,8 @@ special tokens, and HuggingFace compatibility.
 import json
 import os
 import re
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Optional
 
 from loguru import logger
 from tqdm import tqdm
@@ -20,14 +18,16 @@ from tqdm import tqdm
 class BPEConfig:
     vocab_size: int = 50257
     min_frequency: int = 2
-    special_tokens: dict = field(default_factory=lambda: {
-        'pad_token': '<|pad|>',
-        'eos_token': '<|endoftext|>',
-        'bos_token': '<|startoftext|>',
-        'unk_token': '<|unk|>',
-        'sep_token': '<|sep|>',
-        'mask_token': '<|mask|>',
-    })
+    special_tokens: dict = field(
+        default_factory=lambda: {
+            "pad_token": "<|pad|>",
+            "eos_token": "<|endoftext|>",
+            "bos_token": "<|startoftext|>",
+            "unk_token": "<|unk|>",
+            "sep_token": "<|sep|>",
+            "mask_token": "<|mask|>",
+        }
+    )
     pre_tokenize_pattern: str = (
         r"""'s|'t|'re|'ve|'m|'ll|'d| ?\w+| ?\d+| ?[^\s\w\d]+|\s+(?!\S)|\s+"""
     )
@@ -37,13 +37,13 @@ class BPEConfig:
 class ByteLevelBPETokenizer:
     """
     Full Byte-Level BPE Tokenizer (GPT-2 style).
-    
+
     Pipeline:
     1. Pre-tokenization (regex splitting)
     2. Byte-level encoding
     3. BPE merges
     4. Vocabulary management
-    
+
     Features:
     - Full UTF-8 support via byte-level encoding
     - HuggingFace-compatible save/load
@@ -58,9 +58,7 @@ class ByteLevelBPETokenizer:
         self.bpe_ranks: dict[tuple[str, str], int] = {}
         self.special_tokens: dict[str, int] = {}
         self.cache: dict[str, list[str]] = {}
-        self._pre_tokenize = re.compile(
-            config.pre_tokenize_pattern
-        )
+        self._pre_tokenize = re.compile(config.pre_tokenize_pattern)
         self._init_byte_encoder()
 
     def _init_byte_encoder(self):
@@ -70,9 +68,9 @@ class ByteLevelBPETokenizer:
         Avoids whitespace/control characters in vocabulary.
         """
         bs = (
-            list(range(ord('!'), ord('~') + 1))
-            + list(range(ord('¡'), ord('¬') + 1))
-            + list(range(ord('®'), ord('ÿ') + 1))
+            list(range(ord("!"), ord("~") + 1))
+            + list(range(ord("¡"), ord("¬") + 1))
+            + list(range(ord("®"), ord("ÿ") + 1))
         )
         cs = bs[:]
         n = 0
@@ -82,7 +80,7 @@ class ByteLevelBPETokenizer:
                 cs.append(256 + n)
                 n += 1
 
-        self.byte_encoder = {b: chr(c) for b, c in zip(bs, cs)}
+        self.byte_encoder = {b: chr(c) for b, c in zip(bs, cs, strict=False)}
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
 
     def _pre_tokenize_text(self, text: str) -> list[str]:
@@ -90,17 +88,10 @@ class ByteLevelBPETokenizer:
 
     def _word_to_chars(self, word: str) -> tuple[str, ...]:
         """Convert word bytes to unicode chars."""
-        return tuple(
-            self.byte_encoder[b] for b in word.encode('utf-8')
-        )
+        return tuple(self.byte_encoder[b] for b in word.encode("utf-8"))
 
-    def _get_pairs(
-        self, word: tuple[str, ...]
-    ) -> set[tuple[str, str]]:
-        return {
-            (word[i], word[i + 1])
-            for i in range(len(word) - 1)
-        }
+    def _get_pairs(self, word: tuple[str, ...]) -> set[tuple[str, str]]:
+        return {(word[i], word[i + 1]) for i in range(len(word) - 1)}
 
     def _bpe_encode(self, token: str) -> list[str]:
         """Apply BPE merges to a single token."""
@@ -116,10 +107,7 @@ class ByteLevelBPETokenizer:
         while True:
             if not pairs:
                 break
-            bigram = min(
-                pairs,
-                key=lambda p: self.bpe_ranks.get(p, float('inf'))
-            )
+            bigram = min(pairs, key=lambda p: self.bpe_ranks.get(p, float("inf")))
             if bigram not in self.bpe_ranks:
                 break
 
@@ -151,23 +139,17 @@ class ByteLevelBPETokenizer:
         self.cache[token] = result
         return result
 
-    def _get_word_frequencies(
-        self,
-        texts: list[str]
-    ) -> Counter:
+    def _get_word_frequencies(self, texts: list[str]) -> Counter:
         """Count word frequencies from corpus."""
         word_freq: Counter = Counter()
         for text in tqdm(texts, desc="Computing frequencies"):
             tokens = self._pre_tokenize_text(text)
             for token in tokens:
                 chars = self._word_to_chars(token)
-                word_freq[' '.join(chars)] += 1
+                word_freq[" ".join(chars)] += 1
         return word_freq
 
-    def _compute_pair_frequencies(
-        self,
-        vocab: dict[str, int]
-    ) -> Counter:
+    def _compute_pair_frequencies(self, vocab: dict[str, int]) -> Counter:
         """Count adjacent pair frequencies."""
         pairs: Counter = Counter()
         for word, freq in vocab.items():
@@ -177,41 +159,34 @@ class ByteLevelBPETokenizer:
         return pairs
 
     def _merge_vocab(
-        self,
-        vocab: dict[str, int],
-        pair: tuple[str, str]
+        self, vocab: dict[str, int], pair: tuple[str, str]
     ) -> dict[str, int]:
         """Merge a pair in all vocabulary words."""
         new_vocab = {}
-        bigram = re.escape(' '.join(pair))
-        pattern = re.compile(
-            r'(?<!\S)' + bigram + r'(?!\S)'
-        )
+        bigram = re.escape(" ".join(pair))
+        pattern = re.compile(r"(?<!\S)" + bigram + r"(?!\S)")
         for word, freq in vocab.items():
-            new_word = pattern.sub(''.join(pair), word)
+            new_word = pattern.sub("".join(pair), word)
             new_vocab[new_word] = freq
         return new_vocab
 
-    def train(self, texts: list[str]) -> 'ByteLevelBPETokenizer':
+    def train(self, texts: list[str]) -> "ByteLevelBPETokenizer":
         """
         Train BPE tokenizer on corpus.
-        
+
         Args:
             texts: List of training texts
-            
+
         Returns:
             self (for chaining)
         """
         logger.info(
-            f"Training BPE tokenizer. "
-            f"Target vocab: {self.config.vocab_size}"
+            f"Training BPE tokenizer. " f"Target vocab: {self.config.vocab_size}"
         )
 
         # Initialize with special tokens
         vocab: dict[str, int] = {}
-        for token_name, token_str in (
-            self.config.special_tokens.items()
-        ):
+        for _token_name, token_str in self.config.special_tokens.items():
             idx = len(self.encoder)
             self.encoder[token_str] = idx
             self.decoder[idx] = token_str
@@ -261,7 +236,7 @@ class ByteLevelBPETokenizer:
                 merges.append(best_pair)
                 self.bpe_ranks[best_pair] = merge_idx
 
-                merged_token = ''.join(best_pair)
+                merged_token = "".join(best_pair)
                 idx = len(self.encoder)
                 self.encoder[merged_token] = idx
                 self.decoder[idx] = merged_token
@@ -269,19 +244,13 @@ class ByteLevelBPETokenizer:
                 vocab = self._merge_vocab(vocab, best_pair)
                 pbar.update(1)
 
-        logger.info(
-            f"Training complete. Vocab size: {len(self.encoder)}"
-        )
+        logger.info(f"Training complete. Vocab size: {len(self.encoder)}")
         return self
 
-    def encode(
-        self,
-        text: str,
-        add_special_tokens: bool = True
-    ) -> list[int]:
+    def encode(self, text: str, add_special_tokens: bool = True) -> list[int]:
         """Encode text to token IDs."""
-        bos = self.config.special_tokens.get('bos_token', '')
-        eos = self.config.special_tokens.get('eos_token', '')
+        bos = self.config.special_tokens.get("bos_token", "")
+        eos = self.config.special_tokens.get("eos_token", "")
 
         token_ids = []
 
@@ -295,7 +264,7 @@ class ByteLevelBPETokenizer:
                 if bpe_token in self.encoder:
                     token_ids.append(self.encoder[bpe_token])
                 else:
-                    unk = self.config.special_tokens.get('unk_token')
+                    unk = self.config.special_tokens.get("unk_token")
                     if unk and unk in self.encoder:
                         token_ids.append(self.encoder[unk])
 
@@ -304,11 +273,7 @@ class ByteLevelBPETokenizer:
 
         return token_ids
 
-    def decode(
-        self,
-        token_ids: list[int],
-        skip_special_tokens: bool = True
-    ) -> str:
+    def decode(self, token_ids: list[int], skip_special_tokens: bool = True) -> str:
         """Decode token IDs back to text."""
         tokens = []
         special_ids = set(self.special_tokens.values())
@@ -320,23 +285,21 @@ class ByteLevelBPETokenizer:
                 continue
             tokens.append(self.decoder[token_id])
 
-        text = ''.join(tokens)
-        bytes_output = bytearray(
-            self.byte_decoder.get(c, ord(c)) for c in text
-        )
-        return bytes_output.decode('utf-8', errors='replace')
+        text = "".join(tokens)
+        bytes_output = bytearray(self.byte_decoder.get(c, ord(c)) for c in text)
+        return bytes_output.decode("utf-8", errors="replace")
 
     def encode_batch(
         self,
         texts: list[str],
         padding: bool = True,
-        max_length: Optional[int] = None,
-        truncation: bool = True
+        max_length: int | None = None,
+        truncation: bool = True,
     ) -> dict:
         """Batch encoding with padding and truncation."""
         all_ids = [self.encode(t) for t in texts]
         pad_id = self.encoder.get(
-            self.config.special_tokens.get('pad_token', '<|pad|>'), 0
+            self.config.special_tokens.get("pad_token", "<|pad|>"), 0
         )
 
         if max_length and truncation:
@@ -349,109 +312,78 @@ class ByteLevelBPETokenizer:
 
             for ids in all_ids:
                 pad_len = max_len - len(ids)
-                attention_masks.append(
-                    [1] * len(ids) + [0] * pad_len
-                )
+                attention_masks.append([1] * len(ids) + [0] * pad_len)
                 padded_ids.append(ids + [pad_id] * pad_len)
 
-            return {
-                'input_ids': padded_ids,
-                'attention_mask': attention_masks
-            }
+            return {"input_ids": padded_ids, "attention_mask": attention_masks}
 
-        return {'input_ids': all_ids}
+        return {"input_ids": all_ids}
 
     def save(self, save_dir: str):
         """Save tokenizer to directory (HuggingFace compatible)."""
         os.makedirs(save_dir, exist_ok=True)
 
-        with open(
-            os.path.join(save_dir, 'vocab.json'), 'w',
-            encoding='utf-8'
-        ) as f:
+        with open(os.path.join(save_dir, "vocab.json"), "w", encoding="utf-8") as f:
             json.dump(self.encoder, f, ensure_ascii=False, indent=2)
 
         merges = [
             f"{a} {b}"
-            for (a, b) in sorted(
-                self.bpe_ranks.keys(),
-                key=lambda x: self.bpe_ranks[x]
-            )
+            for (a, b) in sorted(self.bpe_ranks.keys(), key=lambda x: self.bpe_ranks[x])
         ]
-        with open(
-            os.path.join(save_dir, 'merges.txt'), 'w',
-            encoding='utf-8'
-        ) as f:
-            f.write('#version: 0.2\n')
-            f.write('\n'.join(merges))
+        with open(os.path.join(save_dir, "merges.txt"), "w", encoding="utf-8") as f:
+            f.write("#version: 0.2\n")
+            f.write("\n".join(merges))
 
         tokenizer_config = {
-            'tokenizer_class': 'ByteLevelBPETokenizer',
-            'vocab_size': self.config.vocab_size,
-            'model_max_length': 2048,
-            'special_tokens': self.config.special_tokens,
-            'bos_token': self.config.special_tokens.get('bos_token'),
-            'eos_token': self.config.special_tokens.get('eos_token'),
-            'unk_token': self.config.special_tokens.get('unk_token'),
-            'pad_token': self.config.special_tokens.get('pad_token'),
+            "tokenizer_class": "ByteLevelBPETokenizer",
+            "vocab_size": self.config.vocab_size,
+            "model_max_length": 2048,
+            "special_tokens": self.config.special_tokens,
+            "bos_token": self.config.special_tokens.get("bos_token"),
+            "eos_token": self.config.special_tokens.get("eos_token"),
+            "unk_token": self.config.special_tokens.get("unk_token"),
+            "pad_token": self.config.special_tokens.get("pad_token"),
         }
         with open(
-            os.path.join(save_dir, 'tokenizer_config.json'), 'w',
-            encoding='utf-8'
+            os.path.join(save_dir, "tokenizer_config.json"), "w", encoding="utf-8"
         ) as f:
             json.dump(tokenizer_config, f, indent=2)
 
-        logger.info(
-            f"Tokenizer saved to {save_dir}. "
-            f"Vocab: {len(self.encoder)}"
-        )
+        logger.info(f"Tokenizer saved to {save_dir}. " f"Vocab: {len(self.encoder)}")
 
     @classmethod
     def load(
-        cls, load_dir: str, config: Optional[BPEConfig] = None
-    ) -> 'ByteLevelBPETokenizer':
+        cls, load_dir: str, config: BPEConfig | None = None
+    ) -> "ByteLevelBPETokenizer":
         """Load tokenizer from directory."""
-        with open(
-            os.path.join(load_dir, 'vocab.json'), 'r',
-            encoding='utf-8'
-        ) as f:
+        with open(os.path.join(load_dir, "vocab.json"), encoding="utf-8") as f:
             encoder = json.load(f)
 
-        with open(
-            os.path.join(load_dir, 'merges.txt'), 'r',
-            encoding='utf-8'
-        ) as f:
-            merges_data = f.read().split('\n')
+        with open(os.path.join(load_dir, "merges.txt"), encoding="utf-8") as f:
+            merges_data = f.read().split("\n")
 
         merges = []
         for line in merges_data:
-            if line.startswith('#') or not line.strip():
+            if line.startswith("#") or not line.strip():
                 continue
             parts = line.split()
             if len(parts) == 2:
                 merges.append(tuple(parts))
 
         if config is None:
-            config_path = os.path.join(
-                load_dir, 'tokenizer_config.json'
-            )
-            with open(config_path, 'r', encoding='utf-8') as f:
+            config_path = os.path.join(load_dir, "tokenizer_config.json")
+            with open(config_path, encoding="utf-8") as f:
                 cfg_data = json.load(f)
             config = BPEConfig(
-                vocab_size=cfg_data.get('vocab_size', 50257),
-                special_tokens=cfg_data.get('special_tokens', {})
+                vocab_size=cfg_data.get("vocab_size", 50257),
+                special_tokens=cfg_data.get("special_tokens", {}),
             )
 
         tokenizer = cls(config)
         tokenizer.encoder = encoder
         tokenizer.decoder = {v: k for k, v in encoder.items()}
-        tokenizer.bpe_ranks = {
-            tuple(merge): i for i, merge in enumerate(merges)
-        }
-        logger.info(
-            f"Loaded tokenizer from {load_dir}. "
-            f"Vocab: {len(encoder)}"
-        )
+        tokenizer.bpe_ranks = {tuple(merge): i for i, merge in enumerate(merges)}
+        logger.info(f"Loaded tokenizer from {load_dir}. " f"Vocab: {len(encoder)}")
         return tokenizer
 
     @property

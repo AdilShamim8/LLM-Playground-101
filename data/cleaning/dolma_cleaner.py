@@ -15,14 +15,11 @@ import os
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Optional
 
 from loguru import logger
 
 from data.cleaning.quality_filters import (
     ContentFilter,
-    QualityConfig,
-    TextQualityFilter,
 )
 
 
@@ -67,7 +64,7 @@ class GopherQualityFilter:
     """
     Gopher-style quality heuristics (DeepMind, 2021).
     Used as core quality signal in Dolma.
-    
+
     Filters based on:
     - Word count and length statistics
     - Symbol/bullet/ellipsis ratios
@@ -82,18 +79,12 @@ class GopherQualityFilter:
         return text.split()
 
     def _get_lines(self, text: str) -> list[str]:
-        return [l.strip() for l in text.split('\n') if l.strip()]
+        return [line.strip() for line in text.split("\n") if line.strip()]
 
     def _get_paragraphs(self, text: str) -> list[str]:
-        return [
-            p.strip()
-            for p in re.split(r'\n\n+', text)
-            if p.strip()
-        ]
+        return [p.strip() for p in re.split(r"\n\n+", text) if p.strip()]
 
-    def check_word_count(
-        self, words: list[str]
-    ) -> tuple[bool, str]:
+    def check_word_count(self, words: list[str]) -> tuple[bool, str]:
         n = len(words)
         if n < self.config.min_words:
             return False, f"Too few words: {n}"
@@ -101,9 +92,7 @@ class GopherQualityFilter:
             return False, f"Too many words: {n}"
         return True, ""
 
-    def check_mean_word_length(
-        self, words: list[str]
-    ) -> tuple[bool, str]:
+    def check_mean_word_length(self, words: list[str]) -> tuple[bool, str]:
         if not words:
             return False, "No words"
         avg = sum(len(w) for w in words) / len(words)
@@ -113,59 +102,43 @@ class GopherQualityFilter:
             return False, f"Mean word length too long: {avg:.2f}"
         return True, ""
 
-    def check_symbol_word_ratio(
-        self, text: str, words: list[str]
-    ) -> tuple[bool, str]:
+    def check_symbol_word_ratio(self, text: str, words: list[str]) -> tuple[bool, str]:
         if not words:
             return False, "No words"
-        symbols = sum(
-            1 for c in text
-            if c in '#<>{}/\\|@$%^&*~`'
-        )
+        symbols = sum(1 for c in text if c in "#<>{}/\\|@$%^&*~`")
         ratio = symbols / len(words)
         if ratio > self.config.max_symbol_word_ratio:
             return False, f"High symbol/word ratio: {ratio:.3f}"
         return True, ""
 
-    def check_bullet_lines(
-        self, lines: list[str]
-    ) -> tuple[bool, str]:
+    def check_bullet_lines(self, lines: list[str]) -> tuple[bool, str]:
         if not lines:
             return True, ""
         bullet_count = sum(
-            1 for l in lines
-            if l.startswith(('•', '-', '*', '·', '◦', '▪', '–'))
+            1 for line in lines if line.startswith(("•", "-", "*", "·", "◦", "▪", "–"))
         )
         ratio = bullet_count / len(lines)
         if ratio > self.config.max_bullet_lines_ratio:
             return False, f"High bullet ratio: {ratio:.3f}"
         return True, ""
 
-    def check_ellipsis_lines(
-        self, lines: list[str]
-    ) -> tuple[bool, str]:
+    def check_ellipsis_lines(self, lines: list[str]) -> tuple[bool, str]:
         if not lines:
             return True, ""
-        ellipsis_count = sum(
-            1 for l in lines
-            if l.endswith('...') or '…' in l
-        )
+        ellipsis_count = sum(1 for line in lines if line.endswith("...") or "…" in line)
         ratio = ellipsis_count / len(lines)
         if ratio > self.config.max_ellipsis_lines_ratio:
             return False, f"High ellipsis ratio: {ratio:.3f}"
         return True, ""
 
-    def check_duplicate_lines(
-        self, lines: list[str], text: str
-    ) -> tuple[bool, str]:
+    def check_duplicate_lines(self, lines: list[str], text: str) -> tuple[bool, str]:
         if not lines or not text:
             return True, ""
         from collections import Counter
+
         counts = Counter(lines)
         dup_chars = sum(
-            len(line) * (count - 1)
-            for line, count in counts.items()
-            if count > 1
+            len(line) * (count - 1) for line, count in counts.items() if count > 1
         )
         ratio = dup_chars / max(len(text), 1)
         if ratio > self.config.max_duplicate_line_char_frac:
@@ -178,11 +151,10 @@ class GopherQualityFilter:
         if not paragraphs or not text:
             return True, ""
         from collections import Counter
+
         counts = Counter(paragraphs)
         dup_chars = sum(
-            len(p) * (count - 1)
-            for p, count in counts.items()
-            if count > 1
+            len(p) * (count - 1) for p, count in counts.items() if count > 1
         )
         ratio = dup_chars / max(len(text), 1)
         if ratio > self.config.max_duplicate_para_char_frac:
@@ -197,31 +169,27 @@ class GopherQualityFilter:
         Catches keyword-stuffed, repetitive content.
         """
         from collections import Counter
+
         for n in self.config.ngram_sizes:
             if len(words) < n:
                 continue
-            ngrams = [
-                tuple(words[i:i+n])
-                for i in range(len(words) - n + 1)
-            ]
+            ngrams = [tuple(words[i : i + n]) for i in range(len(words) - n + 1)]
             counts = Counter(ngrams)
             if not counts:
                 continue
             top_ngram, top_count = counts.most_common(1)[0]
-            top_chars = len(' '.join(top_ngram)) * top_count
+            top_chars = len(" ".join(top_ngram)) * top_count
             ratio = top_chars / max(len(text), 1)
             if ratio > self.config.max_top_ngram_char_frac:
                 return (
                     False,
                     f"Top {n}-gram dominates: "
                     f"'{' '.join(top_ngram)}' "
-                    f"ratio={ratio:.3f}"
+                    f"ratio={ratio:.3f}",
                 )
         return True, ""
 
-    def filter(
-        self, text: str
-    ) -> tuple[bool, float, list[str]]:
+    def filter(self, text: str) -> tuple[bool, float, list[str]]:
         """
         Run all Gopher filters.
         Returns (passed, quality_score, failure_reasons).
@@ -243,9 +211,7 @@ class GopherQualityFilter:
 
         failures = [reason for passed, reason in checks if not passed]
         passed = len(failures) == 0
-        score = (
-            len(checks) - len(failures)
-        ) / len(checks)
+        score = (len(checks) - len(failures)) / len(checks)
 
         return passed, score, failures
 
@@ -259,75 +225,56 @@ class LanguageTagger:
     def __init__(self, min_score: float = 0.65):
         self.min_score = min_score
         self._model = None
-        self._backend = 'langdetect'
+        self._backend = "langdetect"
         self._detection_available = False
         self._load_model()
 
     def _load_model(self):
         try:
-            import fasttext
+            import fasttext  # noqa: F401 — imported for availability check
+
             # fasttext lid model needed
-            self._backend = 'fasttext'
+            self._backend = "fasttext"
             if self._model is not None:
                 self._detection_available = True
         except ImportError:
-            self._backend = 'langdetect'
+            self._backend = "langdetect"
             try:
-                from langdetect import detect_langs
                 self._detection_available = True
-                logger.warning(
-                    "fasttext not available, using langdetect"
-                )
+                logger.warning("fasttext not available, using langdetect")
             except Exception:
                 self._detection_available = False
-                logger.warning(
-                    "langdetect not available; disabling language filter"
-                )
+                logger.warning("langdetect not available; disabling language filter")
 
-    def detect(
-        self, text: str
-    ) -> tuple[str, float]:
+    def detect(self, text: str) -> tuple[str, float]:
         """Returns (language_code, confidence)."""
         if not self._detection_available:
-            return 'unknown', 0.0
+            return "unknown", 0.0
         sample = text[:1000]
         try:
-            if self._backend == 'fasttext' and self._model:
-                labels, scores = self._model.predict(
-                    sample.replace('\n', ' ')
-                )
-                lang = labels[0].replace('__label__', '')
+            if self._backend == "fasttext" and self._model:
+                labels, scores = self._model.predict(sample.replace("\n", " "))
+                lang = labels[0].replace("__label__", "")
                 return lang, float(scores[0])
             else:
                 from langdetect import detect_langs
+
                 results = detect_langs(sample)
                 if results:
                     top = results[0]
                     return top.lang, top.prob
         except Exception:
             pass
-        return 'unknown', 0.0
+        return "unknown", 0.0
 
-    def is_allowed(
-        self,
-        text: str,
-        allowed: list[str]
-    ) -> tuple[bool, str, float]:
+    def is_allowed(self, text: str, allowed: list[str]) -> tuple[bool, str, float]:
         if not self._detection_available:
-            return True, 'unknown', 0.0
+            return True, "unknown", 0.0
         lang, score = self.detect(text)
         if lang not in allowed:
-            return (
-                False,
-                f"Wrong language: {lang} ({score:.2f})",
-                score
-            )
+            return (False, f"Wrong language: {lang} ({score:.2f})", score)
         if score < self.min_score:
-            return (
-                False,
-                f"Low lang confidence: {score:.2f}",
-                score
-            )
+            return (False, f"Low lang confidence: {score:.2f}", score)
         return True, lang, score
 
 
@@ -339,29 +286,22 @@ class ToxicityFilter:
 
     # Simplified toxic keyword patterns
     TOXIC_PATTERNS = [
-        r'\b(hate|kill|murder)\s+(all|every)\s+\w+',
-        r'\b(racist|sexist|homophobic)\b.*\b(slur|attack)\b',
+        r"\b(hate|kill|murder)\s+(all|every)\s+\w+",
+        r"\b(racist|sexist|homophobic)\b.*\b(slur|attack)\b",
     ]
 
-    NSFW_DOMAINS = {
-        'xxx', 'porn', 'adult', 'nsfw', 'sex'
-    }
+    NSFW_DOMAINS = {"xxx", "porn", "adult", "nsfw", "sex"}
 
     def __init__(self, threshold: float = 0.5):
         self.threshold = threshold
-        self.patterns = [
-            re.compile(p, re.IGNORECASE)
-            for p in self.TOXIC_PATTERNS
-        ]
+        self.patterns = [re.compile(p, re.IGNORECASE) for p in self.TOXIC_PATTERNS]
 
     def score(self, text: str) -> float:
         """
         Returns toxicity score 0-1.
         0 = clean, 1 = toxic.
         """
-        hits = sum(
-            1 for p in self.patterns if p.search(text)
-        )
+        hits = sum(1 for p in self.patterns if p.search(text))
         return min(1.0, hits / max(len(self.patterns), 1))
 
     def is_toxic(self, text: str) -> tuple[bool, float]:
@@ -371,10 +311,7 @@ class ToxicityFilter:
     def check_url(self, url: str) -> bool:
         """Check if URL domain suggests NSFW content."""
         url_lower = url.lower()
-        return any(
-            domain in url_lower
-            for domain in self.NSFW_DOMAINS
-        )
+        return any(domain in url_lower for domain in self.NSFW_DOMAINS)
 
 
 class PIIRedactor:
@@ -384,45 +321,24 @@ class PIIRedactor:
     """
 
     PATTERNS = {
-        'ssn': (
-            re.compile(r'\b\d{3}-\d{2}-\d{4}\b'),
-            '[SSN_REDACTED]'
+        "ssn": (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "[SSN_REDACTED]"),
+        "credit_card": (re.compile(r"\b(?:\d{4}[- ]?){3}\d{4}\b"), "[CC_REDACTED]"),
+        "email": (
+            re.compile(r"\b[A-Za-z0-9._%+-]+" r"@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
+            "[EMAIL_REDACTED]",
         ),
-        'credit_card': (
-            re.compile(r'\b(?:\d{4}[- ]?){3}\d{4}\b'),
-            '[CC_REDACTED]'
-        ),
-        'email': (
+        "phone_us": (
             re.compile(
-                r'\b[A-Za-z0-9._%+-]+'
-                r'@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+                r"\b(?:\+?1[-.\s]?)?" r"(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b"
             ),
-            '[EMAIL_REDACTED]'
+            "[PHONE_REDACTED]",
         ),
-        'phone_us': (
-            re.compile(
-                r'\b(?:\+?1[-.\s]?)?'
-                r'(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b'
-            ),
-            '[PHONE_REDACTED]'
-        ),
-        'ip_address': (
-            re.compile(
-                r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
-            ),
-            '[IP_REDACTED]'
-        ),
-        'passport': (
-            re.compile(r'\b[A-Z]{1,2}\d{6,9}\b'),
-            '[PASSPORT_REDACTED]'
-        ),
+        "ip_address": (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "[IP_REDACTED]"),
+        "passport": (re.compile(r"\b[A-Z]{1,2}\d{6,9}\b"), "[PASSPORT_REDACTED]"),
     }
 
     def has_pii(self, text: str) -> bool:
-        return any(
-            pattern.search(text)
-            for pattern, _ in self.PATTERNS.values()
-        )
+        return any(pattern.search(text) for pattern, _ in self.PATTERNS.values())
 
     def redact(self, text: str) -> tuple[str, list[str]]:
         """Redact all PII and return redacted text + types found."""
@@ -437,7 +353,7 @@ class PIIRedactor:
 class DolmaTextCleaner:
     """
     Full Dolma-style cleaning pipeline.
-    
+
     Stages (matching Dolma v1.7 pipeline):
     1. URL-based filtering
     2. Gopher quality heuristics
@@ -446,7 +362,7 @@ class DolmaTextCleaner:
     5. PII redaction
     6. Exact deduplication
     7. Text normalization
-    
+
     Reference: Soldaini et al. (2024) Dolma: an Open Corpus
     of Three Trillion Tokens for Language Model Pretraining
     """
@@ -463,22 +379,22 @@ class DolmaTextCleaner:
         os.makedirs(config.output_dir, exist_ok=True)
 
         self.stats = {
-            'total': 0,
-            'passed': 0,
-            'failed_gopher': 0,
-            'failed_language': 0,
-            'failed_toxicity': 0,
-            'failed_exact_dedup': 0,
-            'pii_redacted': 0,
+            "total": 0,
+            "passed": 0,
+            "failed_gopher": 0,
+            "failed_language": 0,
+            "failed_toxicity": 0,
+            "failed_exact_dedup": 0,
+            "pii_redacted": 0,
         }
 
     def _normalize_text(self, text: str) -> str:
         """Unicode normalization and whitespace cleanup."""
-        text = unicodedata.normalize('NFC', text)
-        text = re.sub(r'\r\n|\r', '\n', text)
-        text = re.sub(r'\n{4,}', '\n\n\n', text)
-        text = re.sub(r'[ \t]+', ' ', text)
-        text = re.sub(r' \n', '\n', text)
+        text = unicodedata.normalize("NFC", text)
+        text = re.sub(r"\r\n|\r", "\n", text)
+        text = re.sub(r"\n{4,}", "\n\n\n", text)
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r" \n", "\n", text)
         return text.strip()
 
     def _exact_dedup(self, text: str) -> bool:
@@ -491,7 +407,7 @@ class DolmaTextCleaner:
 
     def _tag_document(self, doc: dict) -> dict:
         """Add quality tags to document without filtering."""
-        text = doc.get('text', '')
+        text = doc.get("text", "")
         _, gopher_score, gopher_fails = self.gopher.filter(text)
         lang, lang_conf = self.lang_tagger.detect(text)
         tox_score = self.toxicity.score(text)
@@ -499,22 +415,20 @@ class DolmaTextCleaner:
 
         return {
             **doc,
-            'tags': {
-                'gopher_score': gopher_score,
-                'gopher_failures': gopher_fails,
-                'language': lang,
-                'language_confidence': lang_conf,
-                'toxicity_score': tox_score,
-                'has_pii': has_pii,
-                'source': self.config.source_name,
-            }
+            "tags": {
+                "gopher_score": gopher_score,
+                "gopher_failures": gopher_fails,
+                "language": lang,
+                "language_confidence": lang_conf,
+                "toxicity_score": tox_score,
+                "has_pii": has_pii,
+                "source": self.config.source_name,
+            },
         }
 
-    def process_document(
-        self, doc: dict
-    ) -> Optional[dict]:
-        self.stats['total'] += 1
-        text = doc.get('text', '')
+    def process_document(self, doc: dict) -> dict | None:
+        self.stats["total"] += 1
+        text = doc.get("text", "")
 
         if not text or len(text) < self.config.min_length:
             return None
@@ -523,11 +437,9 @@ class DolmaTextCleaner:
         text = self._normalize_text(text)
 
         # ── Stage 2: Gopher Quality ────────────────────────────
-        gopher_passed, gopher_score, failures = (
-            self.gopher.filter(text)
-        )
+        gopher_passed, gopher_score, failures = self.gopher.filter(text)
         if not gopher_passed:
-            self.stats['failed_gopher'] += 1
+            self.stats["failed_gopher"] += 1
             logger.debug(f"Gopher fail: {failures[:2]}")
             return None
 
@@ -536,20 +448,20 @@ class DolmaTextCleaner:
             text, self.config.allowed_languages
         )
         if not lang_ok:
-            self.stats['failed_language'] += 1
+            self.stats["failed_language"] += 1
             return None
 
         # ── Stage 4: Toxicity Filter ───────────────────────────
         if self.config.enable_toxicity_filter:
             is_toxic, tox_score = self.toxicity.is_toxic(text)
             if is_toxic:
-                self.stats['failed_toxicity'] += 1
+                self.stats["failed_toxicity"] += 1
                 return None
 
             # Also check source URL
-            url = doc.get('url', '')
+            url = doc.get("url", "")
             if url and self.toxicity.check_url(url):
-                self.stats['failed_toxicity'] += 1
+                self.stats["failed_toxicity"] += 1
                 return None
 
         # ── Stage 5: PII Redaction ─────────────────────────────
@@ -557,39 +469,35 @@ class DolmaTextCleaner:
         if self.config.redact_pii:
             text, pii_types = self.pii_redactor.redact(text)
             if pii_types:
-                self.stats['pii_redacted'] += 1
+                self.stats["pii_redacted"] += 1
 
         # ── Stage 6: Exact Deduplication ──────────────────────
         if self._exact_dedup(text):
-            self.stats['failed_exact_dedup'] += 1
+            self.stats["failed_exact_dedup"] += 1
             return None
 
-        self.stats['passed'] += 1
+        self.stats["passed"] += 1
 
         return {
             **doc,
-            'text': text,
-            'dolma_metadata': {
-                'gopher_score': gopher_score,
-                'language': lang_info,
-                'language_confidence': lang_conf,
-                'pii_types_redacted': pii_types,
-                'source': self.config.source_name,
-                'pipeline': 'dolma',
-            }
+            "text": text,
+            "dolma_metadata": {
+                "gopher_score": gopher_score,
+                "language": lang_info,
+                "language_confidence": lang_conf,
+                "pii_types_redacted": pii_types,
+                "source": self.config.source_name,
+                "pipeline": "dolma",
+            },
         }
 
-    def process_file(
-        self,
-        input_file: str,
-        output_file: str
-    ) -> dict:
+    def process_file(self, input_file: str, output_file: str) -> dict:
         """Process a JSONL file through the full Dolma pipeline."""
         logger.info(f"Dolma processing: {input_file}")
 
         with (
-            open(input_file, 'r', encoding='utf-8') as fin,
-            open(output_file, 'w', encoding='utf-8') as fout
+            open(input_file, encoding="utf-8") as fin,
+            open(output_file, "w", encoding="utf-8") as fout,
         ):
             for line_num, line in enumerate(fin):
                 line = line.strip()
@@ -599,29 +507,24 @@ class DolmaTextCleaner:
                     doc = json.loads(line)
                     cleaned = self.process_document(doc)
                     if cleaned:
-                        fout.write(json.dumps(cleaned) + '\n')
+                        fout.write(json.dumps(cleaned) + "\n")
                 except json.JSONDecodeError as e:
                     logger.warning(f"JSON error line {line_num}: {e}")
                 except Exception as e:
                     logger.error(f"Error line {line_num}: {e}")
 
                 if line_num % 10000 == 0 and line_num > 0:
-                    logger.info(
-                        f"Dolma progress: {line_num} | "
-                        f"Stats: {self.stats}"
-                    )
+                    logger.info(f"Dolma progress: {line_num} | " f"Stats: {self.stats}")
 
         logger.info(f"Dolma complete. Stats: {self.stats}")
         return self.stats
 
     def process_directory(
-        self,
-        input_dir: str,
-        output_dir: str,
-        pattern: str = "*.jsonl"
+        self, input_dir: str, output_dir: str, pattern: str = "*.jsonl"
     ) -> dict:
         """Process all JSONL files in a directory."""
         import glob
+
         os.makedirs(output_dir, exist_ok=True)
         files = glob.glob(os.path.join(input_dir, pattern))
         logger.info(f"Processing {len(files)} files")

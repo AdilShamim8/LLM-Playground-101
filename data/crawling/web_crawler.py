@@ -10,7 +10,6 @@ import re
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -34,10 +33,20 @@ class CrawlConfig:
     )
     respect_robots: bool = True
     allowed_domains: list = field(default_factory=list)
-    excluded_extensions: list = field(default_factory=lambda: [
-        '.pdf', '.jpg', '.jpeg', '.png', '.gif',
-        '.zip', '.tar', '.gz', '.mp3', '.mp4'
-    ])
+    excluded_extensions: list = field(
+        default_factory=lambda: [
+            ".pdf",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".gif",
+            ".zip",
+            ".tar",
+            ".gz",
+            ".mp3",
+            ".mp4",
+        ]
+    )
 
 
 @dataclass
@@ -61,10 +70,7 @@ class RobotsTxtCache:
         self._lock = asyncio.Lock()
 
     async def can_fetch(
-        self,
-        url: str,
-        user_agent: str,
-        session: aiohttp.ClientSession
+        self, url: str, user_agent: str, session: aiohttp.ClientSession
     ) -> bool:
         domain = urlparse(url).netloc
         async with self._lock:
@@ -103,17 +109,16 @@ class WebCrawler:
 
     def _normalize_url(self, url: str) -> str:
         parsed = urlparse(url)
-        normalized = parsed._replace(fragment='').geturl()
-        return normalized.rstrip('/')
+        normalized = parsed._replace(fragment="").geturl()
+        return normalized.rstrip("/")
 
     def _is_valid_url(self, url: str) -> bool:
         try:
             parsed = urlparse(url)
-            if parsed.scheme not in ('http', 'https'):
+            if parsed.scheme not in ("http", "https"):
                 return False
             if any(
-                url.lower().endswith(ext)
-                for ext in self.config.excluded_extensions
+                url.lower().endswith(ext) for ext in self.config.excluded_extensions
             ):
                 return False
             if (
@@ -128,27 +133,24 @@ class WebCrawler:
     def _extract_text(self, html: str, url: str) -> tuple[str, str]:
         """Extract clean text using trafilatura with BS4 fallback."""
         text = trafilatura.extract(
-            html,
-            include_comments=False,
-            include_tables=True,
-            no_fallback=False
+            html, include_comments=False, include_tables=True, no_fallback=False
         )
         if not text:
-            soup = BeautifulSoup(html, 'html.parser')
-            for tag in soup(['script', 'style', 'nav', 'footer']):
+            soup = BeautifulSoup(html, "html.parser")
+            for tag in soup(["script", "style", "nav", "footer"]):
                 tag.decompose()
-            text = soup.get_text(separator=' ', strip=True)
-            text = re.sub(r'\s+', ' ', text).strip()
+            text = soup.get_text(separator=" ", strip=True)
+            text = re.sub(r"\s+", " ", text).strip()
 
-        soup = BeautifulSoup(html, 'html.parser')
-        title = soup.title.string if soup.title else ''
-        return text or '', title or ''
+        soup = BeautifulSoup(html, "html.parser")
+        title = soup.title.string if soup.title else ""
+        return text or "", title or ""
 
     def _extract_links(self, html: str, base_url: str) -> list[str]:
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html, "html.parser")
         links = []
-        for anchor in soup.find_all('a', href=True):
-            href = anchor['href']
+        for anchor in soup.find_all("a", href=True):
+            href = anchor["href"]
             full_url = urljoin(base_url, href)
             normalized = self._normalize_url(full_url)
             if self._is_valid_url(normalized):
@@ -164,11 +166,8 @@ class WebCrawler:
         self._domain_last_access[domain] = time.time()
 
     async def _fetch_page(
-        self,
-        url: str,
-        depth: int,
-        session: aiohttp.ClientSession
-    ) -> Optional[CrawledPage]:
+        self, url: str, depth: int, session: aiohttp.ClientSession
+    ) -> CrawledPage | None:
         async with self._semaphore:
             domain = urlparse(url).netloc
 
@@ -183,7 +182,7 @@ class WebCrawler:
             await self._respect_rate_limit(domain)
 
             try:
-                headers = {'User-Agent': self.config.user_agent}
+                headers = {"User-Agent": self.config.user_agent}
                 timeout = aiohttp.ClientTimeout(total=self.config.timeout)
 
                 async with session.get(
@@ -192,21 +191,17 @@ class WebCrawler:
                     if response.status != 200:
                         return None
 
-                    content_type = response.headers.get(
-                        'content-type', ''
-                    ).lower()
-                    if 'text/html' not in content_type:
+                    content_type = response.headers.get("content-type", "").lower()
+                    if "text/html" not in content_type:
                         return None
 
-                    html = await response.text(errors='replace')
+                    html = await response.text(errors="replace")
                     text, title = self._extract_text(html, url)
 
                     if not text or len(text) < 100:
                         return None
 
-                    content_hash = hashlib.sha256(
-                        text.encode()
-                    ).hexdigest()
+                    content_hash = hashlib.sha256(text.encode()).hexdigest()
                     if content_hash in self.content_hashes:
                         logger.debug(f"Duplicate content: {url}")
                         return None
@@ -224,15 +219,12 @@ class WebCrawler:
                         content_hash=content_hash,
                         links=links,
                         metadata={
-                            'content_type': content_type,
-                            'status_code': response.status,
-                            'size': len(html)
-                        }
+                            "content_type": content_type,
+                            "status_code": response.status,
+                            "size": len(html),
+                        },
                     )
-                    logger.info(
-                        f"Crawled [{depth}]: {url} "
-                        f"({len(text)} chars)"
-                    )
+                    logger.info(f"Crawled [{depth}]: {url} " f"({len(text)} chars)")
                     return page
 
             except asyncio.TimeoutError:
@@ -243,13 +235,8 @@ class WebCrawler:
 
     async def crawl(self, seed_urls: list[str]) -> list[CrawledPage]:
         """BFS crawl starting from seed URLs."""
-        queue = deque(
-            [(self._normalize_url(u), 0) for u in seed_urls]
-        )
-        connector = aiohttp.TCPConnector(
-            limit=self.config.max_concurrent,
-            ssl=False
-        )
+        queue = deque([(self._normalize_url(u), 0) for u in seed_urls])
+        connector = aiohttp.TCPConnector(limit=self.config.max_concurrent, ssl=False)
 
         async with aiohttp.ClientSession(connector=connector) as session:
             while queue and len(self.pages) < self.config.max_pages:
@@ -266,10 +253,7 @@ class WebCrawler:
                 if not batch:
                     break
 
-                tasks = [
-                    self._fetch_page(url, depth, session)
-                    for url, depth in batch
-                ]
+                tasks = [self._fetch_page(url, depth, session) for url, depth in batch]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 for result in results:
@@ -278,9 +262,7 @@ class WebCrawler:
                         if result.depth < self.config.max_depth:
                             for link in result.links:
                                 if link not in self.visited_urls:
-                                    queue.append(
-                                        (link, result.depth + 1)
-                                    )
+                                    queue.append((link, result.depth + 1))
 
         logger.info(
             f"Crawl complete. Pages: {len(self.pages)}, "
@@ -291,17 +273,18 @@ class WebCrawler:
     def save_results(self, output_path: str):
         import json
         import os
+
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             for page in self.pages:
                 record = {
-                    'url': page.url,
-                    'title': page.title,
-                    'text': page.text,
-                    'depth': page.depth,
-                    'timestamp': page.timestamp,
-                    'content_hash': page.content_hash,
-                    'metadata': page.metadata
+                    "url": page.url,
+                    "title": page.title,
+                    "text": page.text,
+                    "depth": page.depth,
+                    "timestamp": page.timestamp,
+                    "content_hash": page.content_hash,
+                    "metadata": page.metadata,
                 }
-                f.write(json.dumps(record) + '\n')
+                f.write(json.dumps(record) + "\n")
         logger.info(f"Saved {len(self.pages)} pages to {output_path}")

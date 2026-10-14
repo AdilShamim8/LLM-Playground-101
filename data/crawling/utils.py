@@ -7,30 +7,68 @@ result merging, and deduplication helpers.
 import hashlib
 import re
 from urllib.parse import (
+    parse_qsl,
+    urlencode,
     urljoin,
     urlparse,
     urlunparse,
-    urlencode,
-    parse_qsl,
 )
-from typing import Optional
-from loguru import logger
 
+from loguru import logger
 
 # ── URL Utilities ─────────────────────────────────────────────────
 
-EXCLUDED_EXTENSIONS = frozenset([
-    ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg",
-    ".webp", ".ico", ".mp3", ".mp4", ".avi", ".mov", ".wmv",
-    ".flv", ".zip", ".tar", ".gz", ".rar", ".7z", ".exe",
-    ".dmg", ".pkg", ".deb", ".rpm", ".iso", ".bin", ".dat",
-    ".css", ".js", ".xml", ".rss", ".atom", ".json",
-    ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-    ".odt", ".ods", ".odp",
-])
+EXCLUDED_EXTENSIONS = frozenset(
+    [
+        ".pdf",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".bmp",
+        ".svg",
+        ".webp",
+        ".ico",
+        ".mp3",
+        ".mp4",
+        ".avi",
+        ".mov",
+        ".wmv",
+        ".flv",
+        ".zip",
+        ".tar",
+        ".gz",
+        ".rar",
+        ".7z",
+        ".exe",
+        ".dmg",
+        ".pkg",
+        ".deb",
+        ".rpm",
+        ".iso",
+        ".bin",
+        ".dat",
+        ".css",
+        ".js",
+        ".xml",
+        ".rss",
+        ".atom",
+        ".json",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".ppt",
+        ".pptx",
+        ".odt",
+        ".ods",
+        ".odp",
+    ]
+)
 
 JUNK_URL_PATTERNS = [
-    re.compile(p) for p in [
+    re.compile(p)
+    for p in [
         r"/wp-login\.php",
         r"/wp-admin/",
         r"/cart/?$",
@@ -75,9 +113,7 @@ def normalize_url(url: str) -> str:
         query_params = sorted(parse_qsl(parsed.query))
         query = urlencode(query_params)
 
-        normalized = urlunparse((
-            scheme, netloc, path, parsed.params, query, ""
-        ))
+        normalized = urlunparse((scheme, netloc, path, parsed.params, query, ""))
         return normalized
 
     except Exception:
@@ -86,8 +122,8 @@ def normalize_url(url: str) -> str:
 
 def is_valid_url(
     url: str,
-    allowed_domains: Optional[list[str]] = None,
-    excluded_extensions: Optional[frozenset] = None,
+    allowed_domains: list[str] | None = None,
+    excluded_extensions: frozenset | None = None,
 ) -> bool:
     """
     Check if a URL is worth crawling.
@@ -167,6 +203,7 @@ def make_absolute_url(base_url: str, relative_url: str) -> str:
 
 # ── Result Utilities ──────────────────────────────────────────────
 
+
 def deduplicate_urls(urls: list[str]) -> list[str]:
     """
     Deduplicate a list of URLs using normalized form.
@@ -196,16 +233,13 @@ def merge_crawl_results(
         for page in results:
             h = page.get("content_hash", "")
             if not h:
-                h = hashlib.sha256(
-                    page.get("text", "").encode()
-                ).hexdigest()
+                h = hashlib.sha256(page.get("text", "").encode()).hexdigest()
             if h not in seen_hashes:
                 seen_hashes.add(h)
                 merged.append(page)
 
     logger.info(
-        f"Merged {sum(len(r) for r in results_list)} pages "
-        f"-> {len(merged)} unique"
+        f"Merged {sum(len(r) for r in results_list)} pages " f"-> {len(merged)} unique"
     )
     return merged
 
@@ -215,10 +249,7 @@ def filter_urls_by_domain(
     allowed_domains: list[str],
 ) -> list[str]:
     """Keep only URLs from allowed domains."""
-    return [
-        url for url in urls
-        if extract_domain(url) in allowed_domains
-    ]
+    return [url for url in urls if extract_domain(url) in allowed_domains]
 
 
 def estimate_crawl_size(
@@ -229,18 +260,13 @@ def estimate_crawl_size(
     """Estimate total pages that could be crawled."""
     total = 0
     for depth in range(max_depth + 1):
-        total += len(seed_urls) * (avg_links_per_page ** depth)
+        total += len(seed_urls) * (avg_links_per_page**depth)
     return total
 
 
-def chunk_urls(
-    urls: list[str], chunk_size: int
-) -> list[list[str]]:
+def chunk_urls(urls: list[str], chunk_size: int) -> list[list[str]]:
     """Split URL list into chunks for parallel crawling."""
-    return [
-        urls[i:i + chunk_size]
-        for i in range(0, len(urls), chunk_size)
-    ]
+    return [urls[i : i + chunk_size] for i in range(0, len(urls), chunk_size)]
 
 
 def build_robots_url(base_url: str) -> str:
@@ -251,7 +277,5 @@ def build_robots_url(base_url: str) -> str:
 
 def extract_links_from_text(text: str) -> list[str]:
     """Extract all URLs mentioned in plain text."""
-    url_pattern = re.compile(
-        r'https?://[^\s<>"{}|\\^`\[\]]+'
-    )
+    url_pattern = re.compile(r'https?://[^\s<>"{}|\\^`\[\]]+')
     return url_pattern.findall(text)

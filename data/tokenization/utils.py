@@ -7,10 +7,8 @@ Pipeline: JSONL text → tokenize → .bin files
 
 import glob
 import json
-import math
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 from loguru import logger
@@ -60,20 +58,14 @@ def tokenize_corpus_to_bin(
 
     # Gather input files
     if os.path.isdir(input_path):
-        input_files = sorted(glob.glob(
-            os.path.join(input_path, "*.jsonl")
-        ))
+        input_files = sorted(glob.glob(os.path.join(input_path, "*.jsonl")))
     else:
         input_files = [input_path]
 
     if not input_files:
-        raise FileNotFoundError(
-            f"No JSONL files found at {input_path}"
-        )
+        raise FileNotFoundError(f"No JSONL files found at {input_path}")
 
-    logger.info(
-        f"Tokenizing {len(input_files)} files -> {output_dir}"
-    )
+    logger.info(f"Tokenizing {len(input_files)} files -> {output_dir}")
 
     eos_id = tokenizer.encoder.get(
         tokenizer.config.special_tokens.get("eos_token", ""), -1
@@ -94,13 +86,9 @@ def tokenize_corpus_to_bin(
         if not current_shard:
             return
         arr = np.array(current_shard, dtype=np.uint16)
-        shard_path = os.path.join(
-            output_dir, f"train_{shard_idx:05d}.bin"
-        )
+        shard_path = os.path.join(output_dir, f"train_{shard_idx:05d}.bin")
         arr.tofile(shard_path)
-        logger.info(
-            f"Shard {shard_idx}: {len(arr):,} tokens -> {shard_path}"
-        )
+        logger.info(f"Shard {shard_idx}: {len(arr):,} tokens -> {shard_path}")
         stats["num_shards"] += 1
         shard_idx += 1
         current_shard = []
@@ -108,7 +96,7 @@ def tokenize_corpus_to_bin(
     for input_file in input_files:
         logger.info(f"Processing: {input_file}")
 
-        with open(input_file, "r", encoding="utf-8") as f:
+        with open(input_file, encoding="utf-8") as f:
             for line_num, line in enumerate(tqdm(f, desc="Tokenizing")):
                 line = line.strip()
                 if not line:
@@ -122,9 +110,7 @@ def tokenize_corpus_to_bin(
                         continue
 
                     # Tokenize
-                    token_ids = tokenizer.encode(
-                        text, add_special_tokens=False
-                    )
+                    token_ids = tokenizer.encode(text, add_special_tokens=False)
 
                     if not token_ids:
                         stats["skipped_documents"] += 1
@@ -135,9 +121,7 @@ def tokenize_corpus_to_bin(
                         token_ids.append(eos_id)
 
                     # Clip to uint16 range
-                    token_ids = [
-                        min(t, 65535) for t in token_ids
-                    ]
+                    token_ids = [min(t, 65535) for t in token_ids]
 
                     current_shard.extend(token_ids)
                     stats["total_documents"] += 1
@@ -150,9 +134,7 @@ def tokenize_corpus_to_bin(
                 except json.JSONDecodeError:
                     stats["skipped_documents"] += 1
                 except Exception as e:
-                    logger.warning(
-                        f"Error line {line_num}: {e}"
-                    )
+                    logger.warning(f"Error line {line_num}: {e}")
                     stats["skipped_documents"] += 1
 
     # Flush remaining
@@ -191,9 +173,7 @@ def load_tokenized_dataset(
     files = sorted(glob.glob(pattern))
 
     if not files:
-        raise FileNotFoundError(
-            f"No {split} .bin files found in {data_dir}"
-        )
+        raise FileNotFoundError(f"No {split} .bin files found in {data_dir}")
 
     arrays = []
     total = 0
@@ -203,9 +183,7 @@ def load_tokenized_dataset(
         total += len(arr)
         logger.debug(f"Loaded {fpath}: {len(arr):,} tokens")
 
-    logger.info(
-        f"Loaded {len(files)} {split} shards: {total:,} tokens"
-    )
+    logger.info(f"Loaded {len(files)} {split} shards: {total:,} tokens")
     return np.concatenate(arrays) if arrays else np.array([], dtype=np.uint16)
 
 
@@ -231,7 +209,7 @@ def estimate_token_count(
     total_docs_estimate = 0
 
     for fpath in files:
-        with open(fpath, "r", encoding="utf-8") as f:
+        with open(fpath, encoding="utf-8") as f:
             for line in f:
                 total_docs_estimate += 1
                 if len(sampled_texts) < sample_size:
@@ -260,9 +238,7 @@ def estimate_token_count(
         "avg_tokens_per_doc": round(avg_tokens, 1),
         "estimated_total_docs": total_docs_estimate,
         "estimated_total_tokens": estimated_total,
-        "estimated_total_tokens_billions": round(
-            estimated_total / 1e9, 3
-        ),
+        "estimated_total_tokens_billions": round(estimated_total / 1e9, 3),
     }
 
 
@@ -287,17 +263,14 @@ def split_dataset(
         DatasetSplits with file paths and token counts
     """
     import random
+
     random.seed(seed)
 
     os.makedirs(output_dir, exist_ok=True)
 
-    all_files = sorted(glob.glob(
-        os.path.join(data_dir, "train_*.bin")
-    ))
+    all_files = sorted(glob.glob(os.path.join(data_dir, "train_*.bin")))
     if not all_files:
-        raise FileNotFoundError(
-            f"No train_*.bin files found in {data_dir}"
-        )
+        raise FileNotFoundError(f"No train_*.bin files found in {data_dir}")
 
     random.shuffle(all_files)
 
@@ -307,8 +280,8 @@ def split_dataset(
     n_train = n_total - n_val - n_test
 
     train_files = all_files[:n_train]
-    val_files = all_files[n_train:n_train + n_val]
-    test_files = all_files[n_train + n_val:]
+    val_files = all_files[n_train : n_train + n_val]
+    test_files = all_files[n_train + n_val :]
 
     def count_tokens(files: list[str]) -> int:
         total = 0
@@ -321,13 +294,14 @@ def split_dataset(
         """Create symlinks or copy files for split."""
         result = []
         for i, src in enumerate(src_files):
-            fname = os.path.basename(src)
+            os.path.basename(src)
             dst = os.path.join(output_dir, f"{split_name}_{i:05d}.bin")
             if not os.path.exists(dst):
                 try:
                     os.symlink(os.path.abspath(src), dst)
                 except OSError:
                     import shutil
+
                     shutil.copy2(src, dst)
             result.append(dst)
         return result

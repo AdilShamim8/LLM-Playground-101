@@ -8,12 +8,9 @@ import hashlib
 import json
 import os
 import re
-import struct
 import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterator, Optional
 
 import numpy as np
 from loguru import logger
@@ -81,9 +78,9 @@ class MinHashDeduplicator:
         signature = np.full(self.num_perm, self._MAX_HASH, dtype=np.int64)
 
         for token in tokens:
-            token_hash = int(
-                hashlib.md5(token.encode()).hexdigest(), 16
-            ) & self._MAX_HASH
+            token_hash = (
+                int(hashlib.md5(token.encode()).hexdigest(), 16) & self._MAX_HASH
+            )
             hashes = self._hash_value(token_hash)
             signature = np.minimum(signature, hashes)
 
@@ -93,16 +90,9 @@ class MinHashDeduplicator:
         words = text.lower().split()
         if len(words) < n:
             return set(words)
-        return {
-            ' '.join(words[i:i+n])
-            for i in range(len(words) - n + 1)
-        }
+        return {" ".join(words[i : i + n]) for i in range(len(words) - n + 1)}
 
-    def is_duplicate(
-        self,
-        doc_id: str,
-        signature: np.ndarray
-    ) -> bool:
+    def is_duplicate(self, doc_id: str, signature: np.ndarray) -> bool:
         """
         Check if document is near-duplicate of any seen document.
         Uses LSH banding technique.
@@ -162,38 +152,31 @@ class RefinedWebCleaner:
         self.content_filter = ContentFilter()
         self.exact_dedup = ExactDeduplicator()
         self.minhash_dedup = MinHashDeduplicator(
-            num_perm=config.minhash_num_perm,
-            threshold=config.minhash_threshold
+            num_perm=config.minhash_num_perm, threshold=config.minhash_threshold
         )
         os.makedirs(config.output_dir, exist_ok=True)
 
         self.stats = {
-            'total': 0,
-            'passed': 0,
-            'failed_quality': 0,
-            'failed_content': 0,
-            'failed_exact_dedup': 0,
-            'failed_near_dedup': 0,
+            "total": 0,
+            "passed": 0,
+            "failed_quality": 0,
+            "failed_content": 0,
+            "failed_exact_dedup": 0,
+            "failed_near_dedup": 0,
         }
 
     def clean_text(self, text: str) -> str:
         """Basic text normalization."""
-        text = unicodedata.normalize('NFC', text)
-        text = re.sub(r'\r\n|\r', '\n', text)
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        text = re.sub(r'[ \t]+', ' ', text)
-        text = re.sub(
-            r'[^\x09\x0A\x0D\x20-\x7E\x80-\xFF]', '', text
-        )
+        text = unicodedata.normalize("NFC", text)
+        text = re.sub(r"\r\n|\r", "\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"[^\x09\x0A\x0D\x20-\x7E\x80-\xFF]", "", text)
         return text.strip()
 
-    def process_document(
-        self,
-        doc: dict,
-        doc_id: str
-    ) -> Optional[dict]:
-        self.stats['total'] += 1
-        text = doc.get('text', '')
+    def process_document(self, doc: dict, doc_id: str) -> dict | None:
+        self.stats["total"] += 1
+        text = doc.get("text", "")
 
         if not text:
             return None
@@ -203,53 +186,46 @@ class RefinedWebCleaner:
         # Quality filter
         quality_result = self.quality_filter.filter(text)
         if not quality_result.passed:
-            self.stats['failed_quality'] += 1
-            logger.debug(
-                f"Quality fail [{doc_id}]: {quality_result.reasons}"
-            )
+            self.stats["failed_quality"] += 1
+            logger.debug(f"Quality fail [{doc_id}]: {quality_result.reasons}")
             return None
 
         # Content safety filter
         is_safe, issues = self.content_filter.is_safe(text)
         if not is_safe:
-            self.stats['failed_content'] += 1
-            if 'pii_detected' in issues:
+            self.stats["failed_content"] += 1
+            if "pii_detected" in issues:
                 text = self.content_filter.redact_pii(text)
             else:
                 return None
 
         # Exact deduplication
-        if self.config.exact_dedup:
-            if self.exact_dedup.is_duplicate(text):
-                self.stats['failed_exact_dedup'] += 1
-                return None
+        if self.config.exact_dedup and self.exact_dedup.is_duplicate(text):
+            self.stats["failed_exact_dedup"] += 1
+            return None
 
         # Near-duplicate detection
         if self.config.near_dedup:
             signature = self.minhash_dedup.compute_minhash(text)
             if self.minhash_dedup.is_duplicate(doc_id, signature):
-                self.stats['failed_near_dedup'] += 1
+                self.stats["failed_near_dedup"] += 1
                 return None
 
-        self.stats['passed'] += 1
+        self.stats["passed"] += 1
         return {
             **doc,
-            'text': text,
-            'quality_score': quality_result.score,
-            'cleaned': True
+            "text": text,
+            "quality_score": quality_result.score,
+            "cleaned": True,
         }
 
-    def process_file(
-        self,
-        input_file: str,
-        output_file: str
-    ) -> dict:
+    def process_file(self, input_file: str, output_file: str) -> dict:
         """Process a JSONL input file and write cleaned output."""
         logger.info(f"Processing: {input_file}")
 
         with (
-            open(input_file, 'r', encoding='utf-8') as fin,
-            open(output_file, 'w', encoding='utf-8') as fout
+            open(input_file, encoding="utf-8") as fin,
+            open(output_file, "w", encoding="utf-8") as fout,
         ):
             for line_num, line in enumerate(fin):
                 line = line.strip()
@@ -258,22 +234,18 @@ class RefinedWebCleaner:
                 try:
                     doc = json.loads(line)
                     doc_id = doc.get(
-                        'content_hash',
-                        hashlib.md5(line.encode()).hexdigest()
+                        "content_hash", hashlib.md5(line.encode()).hexdigest()
                     )
                     cleaned = self.process_document(doc, doc_id)
                     if cleaned:
-                        fout.write(json.dumps(cleaned) + '\n')
+                        fout.write(json.dumps(cleaned) + "\n")
                 except json.JSONDecodeError as e:
                     logger.warning(f"JSON error line {line_num}: {e}")
                 except Exception as e:
                     logger.error(f"Error line {line_num}: {e}")
 
                 if line_num % 10000 == 0:
-                    logger.info(
-                        f"Progress: {line_num} lines | "
-                        f"Stats: {self.stats}"
-                    )
+                    logger.info(f"Progress: {line_num} lines | " f"Stats: {self.stats}")
 
         logger.info(f"Cleaning stats: {self.stats}")
         return self.stats
