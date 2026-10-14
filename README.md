@@ -189,15 +189,21 @@ CUDA:   12.1+
 ```bash
 # Clone
 git clone https://github.com/AdilShamim8/LLM-Playground-101.git
-cd llm-playground
+cd LLM-Playground-101
 
-# Configure
+# Configure (generate a secure JWT secret first!)
 cp .env.example .env
-# Edit .env: set CUDA_VISIBLE_DEVICES, WANDB_API_KEY, etc.
+# Generate JWT_SECRET_KEY: python -c "import secrets; print(secrets.token_urlsafe(32))"
+# Edit .env: set JWT_SECRET_KEY, CUDA_VISIBLE_DEVICES, WANDB_API_KEY, etc.
 
 # Launch all services
 docker-compose up --build
 ```
+
+> **⚠️ Security**: Never use the default JWT secret in production. Generate
+> a secure key with `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+> and set it as `JWT_SECRET_KEY` in your `.env` file. The app will refuse
+> to start if `DEV_MODE=true` and `ENVIRONMENT=production`.
 
 Services will be available at:
 - **API**: http://localhost:8000
@@ -211,7 +217,7 @@ Services will be available at:
 ```bash
 # 1. Clone and enter
 git clone https://github.com/AdilShamim8/LLM-Playground-101.git
-cd llm-playground
+cd LLM-Playground-101
 
 # 2. Create isolated environment
 python3.11 -m venv .venv
@@ -233,6 +239,8 @@ pip install deepspeed
 
 # 7. Configure
 cp .env.example .env
+# Generate JWT secret: python -c "import secrets; print(secrets.token_urlsafe(32))"
+# Edit .env with your JWT_SECRET_KEY and other settings
 ```
 
 ---
@@ -256,7 +264,16 @@ python run_verification.py
 # Then run the full pipeline
 chmod +x scripts/run_pipeline.sh
 ./scripts/run_pipeline.sh
+
+# Or run individual steps:
+./scripts/run_pipeline.sh --verify       # Verification only
+./scripts/run_pipeline.sh --step 6       # Pre-training only
+./scripts/run_pipeline.sh --step 4       # Train tokenizer only
 ```
+
+> **📖 Production Deployment**: See [docs/PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md)
+> for the architecture, cost analysis, and migration path to scale this
+> system to 100–200M monthly active users.
 
 ---
 
