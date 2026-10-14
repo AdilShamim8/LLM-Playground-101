@@ -9,6 +9,7 @@ Production-ready REST API with:
 """
 
 import asyncio
+import os
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
@@ -22,6 +23,33 @@ from api.routes.chat import router as chat_router
 from api.routes.models import router as models_router
 from api.routes.evaluation import router as eval_router
 from api.middleware.auth import auth_middleware
+
+
+# ── CORS Configuration ───────────────────────────────────────────────────
+#
+# SECURITY: allow_origins=["*"] + allow_credentials=True is INVALID per the
+# CORS spec (https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS/Errors).
+# Browsers will reject credentialed requests from wildcard origins.
+#
+# In production, set CORS_ORIGINS to a comma-separated list of allowed origins:
+#   CORS_ORIGINS=https://app.example.com,https://www.example.com
+#
+# In development, we default to localhost for the UI and API docs.
+
+def _get_cors_origins() -> list[str]:
+    """Parse allowed CORS origins from environment variable."""
+    raw = os.getenv("CORS_ORIGINS", "")
+    if raw:
+        # Explicit list provided — use it
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    # Default: allow localhost for development only
+    return [
+        "http://localhost:7860",   # Gradio UI
+        "http://localhost:3000",   # Next.js / React dev server
+        "http://localhost:8000",   # FastAPI docs
+        "http://127.0.0.1:7860",
+        "http://127.0.0.1:3000",
+    ]
 
 
 @asynccontextmanager
@@ -44,13 +72,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Configure CORS with explicit origins (never wildcard + credentials)
+cors_origins = _get_cors_origins()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
+logger.info(f"CORS allowed origins: {cors_origins}")
 
 app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
 app.include_router(
