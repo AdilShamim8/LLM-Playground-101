@@ -20,8 +20,15 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.cuda.amp import GradScaler, autocast
 from loguru import logger
+
+# NOTE: 'from torch.cuda.amp import GradScaler, autocast' is DEPRECATED
+# since PyTorch 2.1 and will be removed in a future version.
+# The modern API is:
+#   from torch.amp import GradScaler, autocast
+# GradScaler takes a device string: GradScaler('cuda')
+# autocast takes a device_type kwarg: autocast(device_type='cuda')
+from torch.amp import GradScaler, autocast
 
 try:
     import wandb
@@ -376,8 +383,10 @@ class PretrainTrainer:
             max_lr=config.learning_rate
         )
 
-        # Gradient scaler for fp16
+        # Gradient scaler for fp16 (prevents underflow in fp16 training)
+        # Modern API: GradScaler('cuda') instead of GradScaler()
         self.scaler = GradScaler(
+            'cuda',
             enabled=config.fp16
         )
 
