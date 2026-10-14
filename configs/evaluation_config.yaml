@@ -1,35 +1,98 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  evaluation_config.yaml — Evaluation configuration
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  Updated October 2026 with current benchmarks:
+#  - MMLU marked as SATURATED (90%+ for frontier models)
+#  - Added MMLU-Pro (the 2026 replacement)
+#  - Added GPQA Diamond (PhD-level science)
+#  - Added Humanity's Last Exam (frontier benchmark)
+#  - Added SWE-bench (real software engineering)
+#  - Added reasoning model evaluation support
+#
+
 evaluation:
   output_dir: "./evaluation_results"
   batch_size: 16
   max_samples: 1000
   device: "cuda"
 
+# ─── Traditional Metrics ────────────────────────────────────────────────
 perplexity:
-  max_length: 1024
+  max_length: 2048                   # Was 1024 (2026 standard)
   stride: 512
   batch_size: 4
 
 bleu:
-  max_n: 4
+  max_n: 4                           # BLEU-4
   smoothing: true
 
 rouge:
   variants: ["rouge1", "rouge2", "rougeL"]
 
+# ─── Benchmarks (2026 Updated) ──────────────────────────────────────────
 benchmarks:
+  # ── MMLU (SATURATED — use MMLU-Pro instead) ──
   mmlu:
     data_dir: "./data/benchmarks/mmlu"
     num_few_shot: 5
     subjects: "all"
+    # NOTE: MMLU is saturated at 90%+ for frontier models (2026)
+    # Kept for historical comparison only.
+
+  # ── MMLU-Pro (2026 replacement for MMLU) ──
+  mmlu_pro:
+    data_dir: "./data/benchmarks/mmlu_pro"
+    num_few_shot: 5
+    # 12,000 questions, 10 answer choices (vs MMLU's 4)
+    # Graduate-level, requires multi-step reasoning
+    max_eval_samples: 1000
+
+  # ── GPQA Diamond (PhD-level science, 2026 critical) ──
+  gpqa:
+    data_dir: "./data/benchmarks/gpqa"
+    # 198 PhD-level questions (biology, chemistry, physics)
+    # Human expert (no internet): ~65%
+    # Frontier models (2026): 78-82%
+    max_eval_samples: 198             # Full set is small
+
+  # ── Humanity's Last Exam (2026 frontier benchmark) ──
+  hle:
+    data_dir: "./data/benchmarks/hle"
+    # ~2,500 graduate-level questions across ALL domains
+    # Created by Center for AI Safety + Scale AI
+    # Human expert: 70-80%, GPT-5: 25%, Claude 4.5: 38%
+    max_eval_samples: 500
+    timeout_per_question: 300         # 5 min (reasoning models need time)
+
+  # ── SWE-bench Verified (real software engineering) ──
+  swe_bench:
+    data_dir: "./data/benchmarks/swe_bench"
+    # 500 real GitHub issues from popular Python repos
+    # Claude 4.5 Opus: 72% (2026 #1)
+    max_eval_samples: 100             # Full set takes hours
+    timeout_per_problem: 600          # 10 min
+
+  # ── GSM8K (grade-school math, still useful) ──
   gsm8k:
     data_dir: "./data/benchmarks/gsm8k"
     num_few_shot: 8
     max_eval_samples: 500
     chain_of_thought: true
+
+  # ── HellaSwag (common sense, still useful) ──
   hellaswag:
     data_dir: "./data/benchmarks/hellaswag"
     num_few_shot: 10
 
+# ─── Reasoning Model Evaluation (2026) ──────────────────────────────────
+reasoning:
+  # For models with "thinking mode" (GPT-5, Qwen3, DeepSeek-R1)
+  enable_thinking_mode: true
+  max_thinking_tokens: 8192          # Reasoning chain length
+  reasoning_effort: "medium"         # low | medium | high
+
+# ─── Human Evaluation / Chatbot Arena ────────────────────────────────────
 human_eval:
   storage_path: "./data/human_eval"
   elo_k_factor: 32.0
@@ -40,3 +103,14 @@ leaderboard:
   update_interval: 3600
   min_battles: 100
   confidence_level: 0.95
+
+# ─── LLM-as-Judge (2026 standard for automated eval) ────────────────────
+llm_judge:
+  model: "gpt-4"                     # Judge model (use strongest available)
+  temperature: 0.0                   # Deterministic for reproducibility
+  max_workers: 4                    # Parallel evaluation
+  criteria:
+    - "helpfulness"
+    - "harmlessness"
+    - "honesty"
+    - "conciseness"
