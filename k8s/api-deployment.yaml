@@ -1,0 +1,198 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Kubernetes deployment manifests for LLM Playground API
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  This is a starter set of Kubernetes manifests for production deployment.
+#  In a real deployment, use Helm charts for better templating and reuse.
+#
+#  Deploy: kubectl apply -f k8s/
+#  Check:  kubectl get pods -n llm-playground
+#
+#  Includes:
+#  - Namespace
+#  - ConfigMap (non-secret config)
+#  - Secret (sensitive values — use external-secrets or Sealed Secrets in prod)
+#  - Deployment (API pods with health checks + resource limits)
+#  - Service (ClusterIP for internal access)
+#  - HorizontalPodAutoscaler (auto-scale on CPU + concurrent requests)
+#  - Ingress (nginx ingress controller for external access)
+#
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-playground
+  labels:
+    name: llm-playground
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-api-config
+  namespace: llm-playground
+data:
+  ENVIRONMENT: "production"
+  DEV_MODE: "false"
+  LOG_LEVEL: "INFO"
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  API_WORKERS: "4"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "llm_playground"
+  REDIS_URL: "redis://redis:6379/0"
+  CORS_ORIGINS: "https://app.example.com"
+  MODEL_CHECKPOINT_DIR: "/app/checkpoints"
+  DATA_DIR: "/app/data"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: llm-api-secrets
+  namespace: llm-playground
+type: Opaque
+# WARNING: In production, use external-secrets, Sealed Secrets, or a
+# vault (HashiCorp Vault, AWS Secrets Manager). Never commit real secrets.
+# These are base64-encoded placeholders — replace with real values.
+# Encode: echo -n 'value' | base64
+data:
+  JWT_SECRET_KEY: <base64-encoded-32-char-key>
+  POSTGRES_PASSWORD: <base64-encoded-password>
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-api
+  namespace: llm-playground
+  labels:
+    app: llm-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: llm-api
+  template:
+    metadata:
+      labels:
+        app: llm-api
+    spec:
+      containers:
+        - name: api
+          image: llm-playground:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: llm-api-config
+            - secretRef:
+                name: llm-api-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          # Liveness: restart if the process is dead
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness: remove from LB if not ready (don't restart)
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: checkpoints
+              mountPath: /app/checkpoints
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: checkpoints-pvc
+        - name: data
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-api
+  namespace: llm-playground
+spec:
+  selector:
+    app: llm-api
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: llm-api-hpa
+  namespace: llm-playground
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: llm-api
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: llm-api-ingress
+  namespace: llm-playground
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+        - api.example.com
+      secretName: llm-api-tls
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: llm-api
+                port:
+                  number: 80
