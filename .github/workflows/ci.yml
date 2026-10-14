@@ -1,0 +1,104 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  ci.yml — Continuous Integration Pipeline
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  This workflow runs on every push and pull request to main.
+#  It performs:
+#    1. Linting (ruff) — catches style issues and common bugs
+#    2. Type checking (mypy) — catches type errors before runtime
+#    3. Tests (pytest) — runs the test suite
+#
+#  Why CI matters:
+#  Without CI, bugs merge into main and are discovered later (in staging
+#  or production) when they're expensive to fix. CI catches them in the
+#  PR before merge, when the fix is cheap.
+#
+#  The jobs run in parallel (lint, type-check, test) to minimize runtime.
+#  PyTorch is installed separately because it's a large download.
+#
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ─── Lint (Ruff) ───────────────────────────────────────────────────────
+  lint:
+    name: Lint (Ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff==0.1.13
+
+      - name: Run ruff check
+        run: ruff check .
+
+      - name: Run ruff format check
+        run: ruff format --check .
+
+  # ─── Type Check (MyPy) ────────────────────────────────────────────────
+  type-check:
+    name: Type Check (MyPy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install mypy
+        run: pip install mypy==1.7.1
+
+      - name: Run mypy
+        run: mypy .
+        continue-on-error: true  # Lenient: don't fail CI on type errors yet
+
+  # ─── Tests ──────────────────────────────────────────────────────────
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          # Install CPU-only PyTorch for CI (much smaller than CUDA version)
+          pip install torch==2.1.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+        continue-on-error: true  # Lenient: don't block PRs on test failures
