@@ -71,8 +71,14 @@ exclude = [
     "build",
     "dist",
     ".venv",
-    "data",
-    "checkpoints",
+    "data/raw",          # Raw training data (not Python code)
+    "data/processed",    # Cleaned data (not Python code)
+    "data/tokenized",    # Tokenized binary shards (not Python code)
+    "data/split",        # Train/val/test splits (not Python code)
+    "data/sft",          # SFT datasets (not Python code)
+    "data/preference",   # Preference datasets (not Python code)
+    "checkpoints",       # Model weights
+    "tokenizers",        # Trained tokenizer files
 ]
 
 [tool.ruff.lint]
