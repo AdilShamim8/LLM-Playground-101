@@ -124,9 +124,17 @@ async def _stream_response(
     request: ChatCompletionRequest,
     completion_id: str,
 ) -> AsyncIterator[str]:
-    """Async streaming response generator."""
+    """
+    Async streaming response generator.
+
+    PERFORMANCE: The generator.generate_stream() is a synchronous iterator.
+    We wrap each next() call in asyncio.to_thread() so the event loop
+    isn't blocked while waiting for the next token. This allows other
+    requests to be served between tokens.
+    """
     try:
-        for token in generator.generate_stream(
+        # Create the synchronous iterator
+        sync_iter = generator.generate_stream(
             prompt,
             strategy=request.decoding_strategy,
             max_new_tokens=request.max_tokens,
@@ -134,7 +142,45 @@ async def _stream_response(
             top_p=request.top_p,
             top_k=request.top_k,
             repetition_penalty=request.repetition_penalty,
-        ):
+        )
+
+        # Consume tokens in a thread pool to avoid blocking the event loop
+        import queue
+        import threading
+
+        token_queue: queue.Queue = queue.Queue()
+        _SENTINEL = object()
+
+        def _produce_tokens():
+            """Run the blocking generator in a background thread."""
+            try:
+                for token in sync_iter:
+                    token_queue.put(token)
+            except Exception as e:
+                token_queue.put(e)
+            finally:
+                token_queue.put(_SENTINEL)
+
+        # Start the producer thread
+        producer = threading.Thread(target=_produce_tokens, daemon=True)
+        producer.start()
+
+        # Consume tokens from the queue, yielding to the event loop
+        while True:
+            try:
+                # Use asyncio.to_thread to avoid blocking while waiting
+                item = await asyncio.to_thread(token_queue.get, timeout=30.0)
+            except Exception:
+                # Timeout — producer may have hung
+                break
+
+            if item is _SENTINEL:
+                break
+            if isinstance(item, Exception):
+                raise item
+
+            token = item
+
             # Stop sequence check
             if request.stop:
                 if any(stop in token for stop in request.stop):
@@ -152,7 +198,7 @@ async def _stream_response(
                 }]
             }
             yield f"data: {json.dumps(chunk)}\n\n"
-            await asyncio.sleep(0)  # Yield control
+            await asyncio.sleep(0)  # Yield control to event loop
 
         # Final chunk
         final_chunk = {
@@ -245,9 +291,26 @@ async def chat_completions(
         )
 
     # Non-streaming response
+    #
+    # PERFORMANCE: generator.generate() is a synchronous PyTorch call that
+    # can take 1-30 seconds. Calling it directly in an async def BLOCKS
+    # the entire event loop — no other request can be served during
+    # generation. With 1 worker, the server handles 1 request at a time.
+    #
+    # FIX: Run the blocking call in a thread pool via asyncio.to_thread().
+    # This frees the event loop to handle other requests while generation
+    # runs in the background. The thread pool size is managed by asyncio
+    # (default: min(32, os.cpu_count() + 4)).
+    #
+    # For true production scale, use a dedicated inference server (vLLM,
+    # TGI, TensorRT-LLM) that supports continuous batching. This fix
+    # addresses the immediate event-loop blocking issue.
     try:
         t0 = time.time()
-        response_text = generator.generate(
+
+        # Run the blocking generate() call in a thread pool
+        response_text = await asyncio.to_thread(
+            generator.generate,
             prompt,
             strategy=request.decoding_strategy,
             max_new_tokens=request.max_tokens,
