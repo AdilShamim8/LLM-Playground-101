@@ -1,29 +1,22 @@
 """Tests for training pipeline components."""
 
-import os
-import tempfile
+import time
+
 import pytest
 import torch
 import torch.nn as nn
 
-from models.layers import ModelConfig
-from models.gpt import GPTModel
-from training.pretrain import (
-    PretrainConfig,
-    PretrainDataset,
-    CosineSchedulerWithWarmup,
-    PretrainTrainer,
-)
-from training.sft import SFTConfig, ChatFormatter, SFTDataset
-from training.rlhf.reward_model import (
-    RewardModelConfig, RewardModel, PreferenceDataset
-)
-from training.rlhf.verifiable_tasks import (
-    MathVerifier, CodeVerifier, FormatVerifier
-)
+from evaluation.human_eval import ComparisonResult, ELORatingSystem
 from evaluation.metrics import BLEUScore, ROUGEScore
-from evaluation.human_eval import ELORatingSystem, ComparisonResult
-import time
+from models.gpt import GPTModel
+from models.layers import ModelConfig
+from training.pretrain import (
+    CosineSchedulerWithWarmup,
+    PretrainDataset,
+)
+from training.rlhf.reward_model import PreferenceDataset, RewardModel, RewardModelConfig
+from training.rlhf.verifiable_tasks import CodeVerifier, FormatVerifier, MathVerifier
+from training.sft import ChatFormatter
 
 
 @pytest.fixture
@@ -47,19 +40,13 @@ def tiny_model(tiny_config):
 
 # ── Pretrain Tests ────────────────────────────────────────────────
 
-class TestPretraining:
 
+class TestPretraining:
     def test_cosine_scheduler_warmup(self):
         model = nn.Linear(10, 10)
-        optimizer = torch.optim.AdamW(
-            model.parameters(), lr=1e-3
-        )
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
         scheduler = CosineSchedulerWithWarmup(
-            optimizer,
-            warmup_steps=10,
-            max_steps=100,
-            min_lr=1e-5,
-            max_lr=1e-3
+            optimizer, warmup_steps=10, max_steps=100, min_lr=1e-5, max_lr=1e-3
         )
         # During warmup: LR should increase
         lrs = []
@@ -77,15 +64,9 @@ class TestPretraining:
 
     def test_scheduler_min_lr(self):
         model = nn.Linear(10, 10)
-        optimizer = torch.optim.AdamW(
-            model.parameters(), lr=1e-3
-        )
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
         scheduler = CosineSchedulerWithWarmup(
-            optimizer,
-            warmup_steps=5,
-            max_steps=100,
-            min_lr=1e-5,
-            max_lr=1e-3
+            optimizer, warmup_steps=5, max_steps=100, min_lr=1e-5, max_lr=1e-3
         )
         for _ in range(200):
             scheduler.step()
@@ -94,15 +75,12 @@ class TestPretraining:
     def test_pretrain_dataset_tokens(self, tmp_path):
         # Create a fake binary token file
         import numpy as np
+
         tokens = np.random.randint(0, 500, size=1000, dtype=np.uint16)
         fpath = str(tmp_path / "train_000.bin")
         tokens.tofile(fpath)
 
-        dataset = PretrainDataset(
-            data_path=str(tmp_path),
-            seq_length=32,
-            split="train"
-        )
+        dataset = PretrainDataset(data_path=str(tmp_path), seq_length=32, split="train")
         assert len(dataset) > 0
         item = dataset[0]
         assert "input_ids" in item
@@ -119,15 +97,11 @@ class TestPretraining:
         assert not torch.isnan(out.loss)
 
     def test_pretrain_backward(self, tiny_model):
-        optimizer = torch.optim.AdamW(
-            tiny_model.parameters(), lr=1e-4
-        )
+        optimizer = torch.optim.AdamW(tiny_model.parameters(), lr=1e-4)
         input_ids = torch.randint(0, 500, (2, 16))
         labels = torch.randint(0, 500, (2, 16))
 
-        loss_before = tiny_model(
-            input_ids=input_ids, labels=labels
-        ).loss.item()
+        loss_before = tiny_model(input_ids=input_ids, labels=labels).loss.item()
 
         for _ in range(5):
             out = tiny_model(input_ids=input_ids, labels=labels)
@@ -135,22 +109,17 @@ class TestPretraining:
             optimizer.step()
             optimizer.zero_grad()
 
-        loss_after = tiny_model(
-            input_ids=input_ids, labels=labels
-        ).loss.item()
+        loss_after = tiny_model(input_ids=input_ids, labels=labels).loss.item()
         # Loss should decrease (overfit on tiny batch)
         assert loss_after < loss_before
 
 
 # ── SFT Tests ─────────────────────────────────────────────────────
 
-class TestSFT:
 
+class TestSFT:
     def test_chat_formatter_chatml(self):
-        formatter = ChatFormatter(
-            template="chatml",
-            system_prompt="You are helpful."
-        )
+        formatter = ChatFormatter(template="chatml", system_prompt="You are helpful.")
         messages = [
             {"role": "user", "content": "Hello"},
             {"role": "assistant", "content": "Hi there!"},
@@ -159,6 +128,7 @@ class TestSFT:
         class MockTokenizer:
             def encode(self, text, **kwargs):
                 return list(range(len(text.split())))
+
             def decode(self, ids, **kwargs):
                 return "decoded"
 
@@ -181,6 +151,7 @@ class TestSFT:
         class MockTokenizer:
             def encode(self, text, **kwargs):
                 return list(range(min(len(text.split()), 100)))
+
             def decode(self, ids, **kwargs):
                 return "decoded"
 
@@ -189,18 +160,16 @@ class TestSFT:
         )
         labels = result["labels"]
         # Some labels should be -100 (user/system tokens)
-        has_masked = any(l == -100 for l in labels)
+        has_masked = any(lbl == -100 for lbl in labels)
         assert has_masked
 
 
 # ── Reward Model Tests ────────────────────────────────────────────
 
-class TestRewardModel:
 
+class TestRewardModel:
     def test_reward_model_forward(self, tiny_model, tiny_config):
-        rm_config = RewardModelConfig(
-            hidden_size=tiny_config.hidden_size
-        )
+        rm_config = RewardModelConfig(hidden_size=tiny_config.hidden_size)
         rm = RewardModel(tiny_model, rm_config)
         input_ids = torch.randint(0, 500, (2, 16))
         rewards = rm(input_ids)
@@ -208,17 +177,13 @@ class TestRewardModel:
         assert not torch.isnan(rewards).any()
 
     def test_preference_loss(self, tiny_model, tiny_config):
-        rm_config = RewardModelConfig(
-            hidden_size=tiny_config.hidden_size
-        )
+        rm_config = RewardModelConfig(hidden_size=tiny_config.hidden_size)
         rm = RewardModel(tiny_model, rm_config)
 
         chosen = torch.randint(0, 500, (2, 16))
         rejected = torch.randint(0, 500, (2, 16))
 
-        loss, metrics = rm.compute_preference_loss(
-            chosen, rejected
-        )
+        loss, metrics = rm.compute_preference_loss(chosen, rejected)
         assert loss.item() > 0
         assert "accuracy" in metrics
         assert 0.0 <= metrics["accuracy"] <= 1.0
@@ -229,9 +194,7 @@ class TestRewardModel:
                 return list(range(min(50, len(text.split()))))
 
         dataset = PreferenceDataset(
-            data_path="nonexistent_path",
-            tokenizer=MockTokenizer(),
-            max_length=64
+            data_path="nonexistent_path", tokenizer=MockTokenizer(), max_length=64
         )
         assert len(dataset) > 0
         item = dataset[0]
@@ -241,14 +204,12 @@ class TestRewardModel:
 
 # ── Verifiable Tasks Tests ────────────────────────────────────────
 
-class TestVerifiableTasks:
 
+class TestVerifiableTasks:
     def test_math_verifier_correct(self):
         verifier = MathVerifier()
         result = verifier.compute_reward(
-            prompt="What is 2 + 2?",
-            response="The answer is 4.",
-            ground_truth="4"
+            prompt="What is 2 + 2?", response="The answer is 4.", ground_truth="4"
         )
         assert result.passed
         assert result.reward == 1.0
@@ -256,9 +217,7 @@ class TestVerifiableTasks:
     def test_math_verifier_wrong(self):
         verifier = MathVerifier()
         result = verifier.compute_reward(
-            prompt="What is 2 + 2?",
-            response="The answer is 5.",
-            ground_truth="4"
+            prompt="What is 2 + 2?", response="The answer is 5.", ground_truth="4"
         )
         assert not result.passed
         assert result.reward < 1.0
@@ -272,9 +231,7 @@ class TestVerifiableTasks:
     def test_code_verifier_syntax_error(self):
         verifier = CodeVerifier()
         result = verifier.compute_reward(
-            prompt="Write code",
-            response="def foo(:\n    pass",
-            ground_truth=""
+            prompt="Write code", response="def foo(:\n    pass", ground_truth=""
         )
         assert not result.passed
         assert result.reward < 0
@@ -284,7 +241,7 @@ class TestVerifiableTasks:
         result = verifier.compute_reward(
             prompt="Print hello",
             response="```python\nprint('hello')\n```",
-            ground_truth="hello"
+            ground_truth="hello",
         )
         # Should execute and compare output
         assert result.reward >= 0
@@ -294,7 +251,7 @@ class TestVerifiableTasks:
         result = verifier.compute_reward(
             prompt="Return JSON",
             response='{"key": "value", "number": 42}',
-            ground_truth="json"
+            ground_truth="json",
         )
         assert result.passed
         assert result.reward == 1.0
@@ -304,7 +261,7 @@ class TestVerifiableTasks:
         result = verifier.compute_reward(
             prompt="Return JSON",
             response="This is not JSON at all.",
-            ground_truth="json"
+            ground_truth="json",
         )
         assert not result.passed
         assert result.reward == 0.0
@@ -312,8 +269,8 @@ class TestVerifiableTasks:
 
 # ── Evaluation Tests ──────────────────────────────────────────────
 
-class TestEvaluationMetrics:
 
+class TestEvaluationMetrics:
     def test_bleu_perfect(self):
         bleu = BLEUScore()
         hyps = ["the cat sat on the mat"]
@@ -360,8 +317,8 @@ class TestEvaluationMetrics:
 
 # ── ELO / Leaderboard Tests ───────────────────────────────────────
 
-class TestHumanEval:
 
+class TestHumanEval:
     def test_elo_initial_rating(self):
         elo = ELORatingSystem(k_factor=32)
         result = ComparisonResult(
@@ -373,7 +330,7 @@ class TestHumanEval:
             response_b="Machine learning is...",
             winner="a",
             judge_id="user1",
-            timestamp=time.time()
+            timestamp=time.time(),
         )
         elo.update(result)
         assert "model_a" in elo.ratings
@@ -386,11 +343,13 @@ class TestHumanEval:
         result = ComparisonResult(
             comparison_id="test-tie",
             prompt="Test",
-            model_a="m1", model_b="m2",
-            response_a="resp", response_b="resp",
+            model_a="m1",
+            model_b="m2",
+            response_a="resp",
+            response_b="resp",
             winner="tie",
             judge_id="user1",
-            timestamp=time.time()
+            timestamp=time.time(),
         )
         elo.update(result)
         # Tie from equal ratings: both stay near 1000
@@ -410,7 +369,7 @@ class TestHumanEval:
                 response_b="Bad response",
                 winner="a",
                 judge_id=f"user{i}",
-                timestamp=time.time()
+                timestamp=time.time(),
             )
             elo.update(result)
 
@@ -429,9 +388,8 @@ class TestHumanEval:
 
     def test_human_eval_collector(self, tmp_path):
         from evaluation.human_eval import HumanEvalCollector
-        collector = HumanEvalCollector(
-            storage_path=str(tmp_path)
-        )
+
+        collector = HumanEvalCollector(storage_path=str(tmp_path))
         result = collector.submit_comparison(
             prompt="What is AI?",
             model_a="gpt-4",
@@ -439,7 +397,7 @@ class TestHumanEval:
             model_b="gpt-3",
             response_b="AI stands for artificial intelligence.",
             winner="a",
-            judge_id="test_user"
+            judge_id="test_user",
         )
         assert result.comparison_id is not None
         board = collector.get_leaderboard()

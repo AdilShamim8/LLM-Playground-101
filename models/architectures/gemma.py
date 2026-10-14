@@ -12,23 +12,22 @@ Reference: Gemma: Open Models Based on Gemini (2024)
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.layers import ModelConfig, RMSNorm, RotaryEmbedding
+from models.layers import ModelConfig, RotaryEmbedding
 
 
 @dataclass
 class GemmaConfig(ModelConfig):
     # Gemma-specific
-    logit_soft_cap: float = 30.0        # Tanh soft-capping
-    attn_logit_softcap: float = 50.0    # Attention logit cap
+    logit_soft_cap: float = 30.0  # Tanh soft-capping
+    attn_logit_softcap: float = 50.0  # Attention logit cap
     use_logit_softcap: bool = True
-    embedding_multiplier: float = 1.0   # sqrt(hidden_size)
-    hidden_act: str = "gelu"            # "gelu" or "relu2"
+    embedding_multiplier: float = 1.0  # sqrt(hidden_size)
+    hidden_act: str = "gelu"  # "gelu" or "relu2"
 
     def __post_init__(self):
         # Gemma uses sqrt(hidden_size) as embedding scale
@@ -93,79 +92,72 @@ class GemmaAttention(nn.Module):
     - No bias in any projection
     """
 
-    def __init__(
-        self, config: GemmaConfig, layer_idx: int = 0
-    ):
+    def __init__(self, config: GemmaConfig, layer_idx: int = 0):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.num_heads = config.num_heads
         self.num_kv_heads = config.num_kv_heads
         self.head_dim = config.hidden_size // config.num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.groups = config.num_heads // config.num_kv_heads
 
         self.q_proj = nn.Linear(
-            config.hidden_size,
-            config.num_heads * self.head_dim,
-            bias=False
+            config.hidden_size, config.num_heads * self.head_dim, bias=False
         )
         self.k_proj = nn.Linear(
-            config.hidden_size,
-            config.num_kv_heads * self.head_dim,
-            bias=False
+            config.hidden_size, config.num_kv_heads * self.head_dim, bias=False
         )
         self.v_proj = nn.Linear(
-            config.hidden_size,
-            config.num_kv_heads * self.head_dim,
-            bias=False
+            config.hidden_size, config.num_kv_heads * self.head_dim, bias=False
         )
         self.o_proj = nn.Linear(
-            config.num_heads * self.head_dim,
-            config.hidden_size,
-            bias=False
+            config.num_heads * self.head_dim, config.hidden_size, bias=False
         )
 
         self.rope = RotaryEmbedding(
             self.head_dim,
             max_position_embeddings=config.max_position_embeddings,
-            theta=config.rope_theta
+            theta=config.rope_theta,
         )
 
         self.attn_logit_softcap = (
-            config.attn_logit_softcap
-            if config.use_logit_softcap else None
+            config.attn_logit_softcap if config.use_logit_softcap else None
         )
 
     def _repeat_kv(self, x: torch.Tensor) -> torch.Tensor:
         if self.groups == 1:
             return x
         B, num_kv, S, D = x.shape
-        x = x.unsqueeze(2).expand(
-            B, num_kv, self.groups, S, D
-        )
+        x = x.unsqueeze(2).expand(B, num_kv, self.groups, S, D)
         return x.reshape(B, num_kv * self.groups, S, D)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         kv_cache=None,
         output_attentions: bool = False,
         use_causal_mask: bool = True,
     ) -> tuple:
         B, S, _ = hidden_states.shape
 
-        q = self.q_proj(hidden_states).view(
-            B, S, self.num_heads, self.head_dim
-        ).transpose(1, 2)
-        k = self.k_proj(hidden_states).view(
-            B, S, self.num_kv_heads, self.head_dim
-        ).transpose(1, 2)
-        v = self.v_proj(hidden_states).view(
-            B, S, self.num_kv_heads, self.head_dim
-        ).transpose(1, 2)
+        q = (
+            self.q_proj(hidden_states)
+            .view(B, S, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        k = (
+            self.k_proj(hidden_states)
+            .view(B, S, self.num_kv_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        v = (
+            self.v_proj(hidden_states)
+            .view(B, S, self.num_kv_heads, self.head_dim)
+            .transpose(1, 2)
+        )
 
         q, k = self.rope(q, k, position_ids)
 
@@ -175,9 +167,7 @@ class GemmaAttention(nn.Module):
         k = self._repeat_kv(k)
         v = self._repeat_kv(v)
 
-        attn_weights = torch.matmul(
-            q, k.transpose(-2, -1)
-        ) * self.scale
+        attn_weights = torch.matmul(q, k.transpose(-2, -1)) * self.scale
 
         # Attention logit soft-capping (Gemma2 feature)
         if self.attn_logit_softcap is not None:
@@ -187,19 +177,18 @@ class GemmaAttention(nn.Module):
 
         if use_causal_mask:
             from models.attention import causal_mask
+
             mask = causal_mask(S, q.device, q.dtype)
             attn_weights = attn_weights + mask
 
         if attention_mask is not None:
             attn_weights = attn_weights + attention_mask
 
-        attn_weights = F.softmax(
-            attn_weights, dim=-1, dtype=torch.float32
-        ).to(q.dtype)
+        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
 
         out = torch.matmul(attn_weights, v)
-        out = out.transpose(1, 2).contiguous().view(
-            B, S, self.num_heads * self.head_dim
+        out = (
+            out.transpose(1, 2).contiguous().view(B, S, self.num_heads * self.head_dim)
         )
         out = self.o_proj(out)
 
@@ -209,7 +198,7 @@ class GemmaAttention(nn.Module):
 class GemmaModel(nn.Module):
     """
     Full Gemma causal language model.
-    
+
     Key features vs GPT:
     1. GemmaRMSNorm (1 + weight formulation)
     2. Embedding scaling by sqrt(hidden_size)
@@ -222,23 +211,14 @@ class GemmaModel(nn.Module):
         super().__init__()
         self.config = config
 
-        self.embedding = nn.Embedding(
-            config.vocab_size, config.hidden_size
-        )
-
-        from models.transformer import TransformerModel
+        self.embedding = nn.Embedding(config.vocab_size, config.hidden_size)
 
         # Override layers with Gemma blocks
-        self.layers = nn.ModuleList([
-            self._build_gemma_block(config, i)
-            for i in range(config.num_layers)
-        ])
-        self.norm = GemmaRMSNorm(
-            config.hidden_size, config.layer_norm_eps
+        self.layers = nn.ModuleList(
+            [self._build_gemma_block(config, i) for i in range(config.num_layers)]
         )
-        self.lm_head = nn.Linear(
-            config.hidden_size, config.vocab_size, bias=False
-        )
+        self.norm = GemmaRMSNorm(config.hidden_size, config.layer_norm_eps)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Weight tying
         if config.tie_word_embeddings:
@@ -246,20 +226,14 @@ class GemmaModel(nn.Module):
 
         self._init_weights()
 
-    def _build_gemma_block(
-        self, config: GemmaConfig, layer_idx: int
-    ) -> nn.Module:
+    def _build_gemma_block(self, config: GemmaConfig, layer_idx: int) -> nn.Module:
         """Build a single Gemma transformer block."""
 
         class GemmaBlock(nn.Module):
             def __init__(self, cfg, idx):
                 super().__init__()
-                self.ln_1 = GemmaRMSNorm(
-                    cfg.hidden_size, cfg.layer_norm_eps
-                )
-                self.ln_2 = GemmaRMSNorm(
-                    cfg.hidden_size, cfg.layer_norm_eps
-                )
+                self.ln_1 = GemmaRMSNorm(cfg.hidden_size, cfg.layer_norm_eps)
+                self.ln_2 = GemmaRMSNorm(cfg.hidden_size, cfg.layer_norm_eps)
                 self.attn = GemmaAttention(cfg, idx)
                 self.mlp = GemmaMLP(cfg)
 
@@ -283,9 +257,9 @@ class GemmaModel(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         kv_cache=None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -298,9 +272,7 @@ class GemmaModel(nn.Module):
         x = x * self.config.embedding_multiplier
 
         if position_ids is None:
-            position_ids = torch.arange(
-                S, device=input_ids.device
-            ).unsqueeze(0)
+            position_ids = torch.arange(S, device=input_ids.device).unsqueeze(0)
 
         # Transformer layers
         for layer in self.layers:
@@ -330,8 +302,9 @@ class GemmaModel(nn.Module):
             loss = F.cross_entropy(
                 shift_logits.view(-1, self.config.vocab_size),
                 shift_labels.view(-1),
-                ignore_index=self.config.pad_token_id
+                ignore_index=self.config.pad_token_id,
             )
 
         from models.gpt import GPTOutput
+
         return GPTOutput(loss=loss, logits=logits)

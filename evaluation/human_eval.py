@@ -13,7 +13,6 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Optional
 
 from loguru import logger
 
@@ -26,7 +25,7 @@ class ComparisonResult:
     model_b: str
     response_a: str
     response_b: str
-    winner: str             # "a" | "b" | "tie"
+    winner: str  # "a" | "b" | "tie"
     judge_id: str
     timestamp: float
     metadata: dict = field(default_factory=dict)
@@ -54,35 +53,25 @@ class ModelRating:
             return (0.0, 1.0)
         p = self.win_rate
         z = 1.96
-        center = (p + z**2 / (2*n)) / (1 + z**2 / n)
-        half_width = (
-            z * math.sqrt(p*(1-p)/n + z**2/(4*n**2))
-            / (1 + z**2/n)
-        )
-        return (
-            max(0, center - half_width),
-            min(1, center + half_width)
-        )
+        center = (p + z**2 / (2 * n)) / (1 + z**2 / n)
+        half_width = z * math.sqrt(p * (1 - p) / n + z**2 / (4 * n**2)) / (1 + z**2 / n)
+        return (max(0, center - half_width), min(1, center + half_width))
 
 
 class ELORatingSystem:
     """
     ELO rating system for chatbot evaluation.
     Used by Chatbot Arena (LMSYS).
-    
+
     ELO update:
         E_a = 1 / (1 + 10^((R_b - R_a) / 400))
         R_a_new = R_a + K * (S_a - E_a)
-    
+
     where S_a = 1 (win), 0.5 (tie), 0 (loss)
     K = 32 (sensitivity factor)
     """
 
-    def __init__(
-        self,
-        k_factor: float = 32.0,
-        initial_elo: float = 1000.0
-    ):
+    def __init__(self, k_factor: float = 32.0, initial_elo: float = 1000.0):
         self.k_factor = k_factor
         self.initial_elo = initial_elo
         self.ratings: dict[str, ModelRating] = {}
@@ -90,8 +79,7 @@ class ELORatingSystem:
     def _get_or_create(self, model_name: str) -> ModelRating:
         if model_name not in self.ratings:
             self.ratings[model_name] = ModelRating(
-                model_name=model_name,
-                elo=self.initial_elo
+                model_name=model_name, elo=self.initial_elo
             )
         return self.ratings[model_name]
 
@@ -110,11 +98,11 @@ class ELORatingSystem:
         expected_a = self.expected_score(elo_a, elo_b)
         expected_b = 1.0 - expected_a
 
-        if result.winner == 'a':
+        if result.winner == "a":
             score_a, score_b = 1.0, 0.0
             model_a.wins += 1
             model_b.losses += 1
-        elif result.winner == 'b':
+        elif result.winner == "b":
             score_a, score_b = 0.0, 1.0
             model_b.wins += 1
             model_a.losses += 1
@@ -141,22 +129,24 @@ class ELORatingSystem:
         board = []
         for name, rating in self.ratings.items():
             ci_low, ci_high = rating.confidence_interval
-            board.append({
-                'rank': 0,
-                'model': name,
-                'elo': round(rating.elo, 1),
-                'wins': rating.wins,
-                'losses': rating.losses,
-                'ties': rating.ties,
-                'total': rating.total_comparisons,
-                'win_rate': round(rating.win_rate * 100, 1),
-                'ci_95_low': round(ci_low * 100, 1),
-                'ci_95_high': round(ci_high * 100, 1),
-            })
+            board.append(
+                {
+                    "rank": 0,
+                    "model": name,
+                    "elo": round(rating.elo, 1),
+                    "wins": rating.wins,
+                    "losses": rating.losses,
+                    "ties": rating.ties,
+                    "total": rating.total_comparisons,
+                    "win_rate": round(rating.win_rate * 100, 1),
+                    "ci_95_low": round(ci_low * 100, 1),
+                    "ci_95_high": round(ci_high * 100, 1),
+                }
+            )
 
-        board.sort(key=lambda x: x['elo'], reverse=True)
+        board.sort(key=lambda x: x["elo"], reverse=True)
         for i, row in enumerate(board):
-            row['rank'] = i + 1
+            row["rank"] = i + 1
         return board
 
 
@@ -166,11 +156,7 @@ class HumanEvalCollector:
     Stores results and updates ELO leaderboard.
     """
 
-    def __init__(
-        self,
-        storage_path: str = "./data/human_eval",
-        elo_k: float = 32.0
-    ):
+    def __init__(self, storage_path: str = "./data/human_eval", elo_k: float = 32.0):
         self.storage_path = storage_path
         self.elo_system = ELORatingSystem(k_factor=elo_k)
         self.comparisons: list[ComparisonResult] = []
@@ -179,11 +165,11 @@ class HumanEvalCollector:
 
     def _load_existing(self):
         """Load saved comparisons and rebuild ELO."""
-        fpath = os.path.join(self.storage_path, 'comparisons.jsonl')
+        fpath = os.path.join(self.storage_path, "comparisons.jsonl")
         if not os.path.exists(fpath):
             return
 
-        with open(fpath, 'r', encoding='utf-8') as f:
+        with open(fpath, encoding="utf-8") as f:
             for line in f:
                 try:
                     data = json.loads(line.strip())
@@ -193,9 +179,7 @@ class HumanEvalCollector:
                 except Exception as e:
                     logger.warning(f"Load error: {e}")
 
-        logger.info(
-            f"Loaded {len(self.comparisons)} comparisons"
-        )
+        logger.info(f"Loaded {len(self.comparisons)} comparisons")
 
     def submit_comparison(
         self,
@@ -206,12 +190,10 @@ class HumanEvalCollector:
         response_b: str,
         winner: str,
         judge_id: str = "anonymous",
-        metadata: Optional[dict] = None
+        metadata: dict | None = None,
     ) -> ComparisonResult:
         """Submit a human preference judgment."""
-        assert winner in ('a', 'b', 'tie'), (
-            "winner must be 'a', 'b', or 'tie'"
-        )
+        assert winner in ("a", "b", "tie"), "winner must be 'a', 'b', or 'tie'"
 
         result = ComparisonResult(
             comparison_id=str(uuid.uuid4()),
@@ -223,23 +205,20 @@ class HumanEvalCollector:
             winner=winner,
             judge_id=judge_id,
             timestamp=time.time(),
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         self.comparisons.append(result)
         self.elo_system.update(result)
         self._save_comparison(result)
 
-        logger.info(
-            f"Comparison saved: {model_a} vs {model_b}, "
-            f"winner={winner}"
-        )
+        logger.info(f"Comparison saved: {model_a} vs {model_b}, " f"winner={winner}")
         return result
 
     def _save_comparison(self, result: ComparisonResult):
-        fpath = os.path.join(self.storage_path, 'comparisons.jsonl')
-        with open(fpath, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(vars(result)) + '\n')
+        fpath = os.path.join(self.storage_path, "comparisons.jsonl")
+        with open(fpath, "a", encoding="utf-8") as f:
+            f.write(json.dumps(vars(result)) + "\n")
 
     def get_leaderboard(self) -> list[dict]:
         return self.elo_system.get_leaderboard()
@@ -247,31 +226,35 @@ class HumanEvalCollector:
     def save_leaderboard(self):
         """Save leaderboard snapshot to JSON."""
         board = self.get_leaderboard()
-        fpath = os.path.join(self.storage_path, 'leaderboard.json')
-        with open(fpath, 'w') as f:
-            json.dump({
-                'timestamp': time.time(),
-                'leaderboard': board,
-                'total_comparisons': len(self.comparisons)
-            }, f, indent=2)
+        fpath = os.path.join(self.storage_path, "leaderboard.json")
+        with open(fpath, "w") as f:
+            json.dump(
+                {
+                    "timestamp": time.time(),
+                    "leaderboard": board,
+                    "total_comparisons": len(self.comparisons),
+                },
+                f,
+                indent=2,
+            )
         logger.info(f"Leaderboard saved: {fpath}")
         return board
 
-    def get_model_stats(self, model_name: str) -> Optional[dict]:
+    def get_model_stats(self, model_name: str) -> dict | None:
         """Get detailed stats for a specific model."""
         if model_name not in self.elo_system.ratings:
             return None
         rating = self.elo_system.ratings[model_name]
         ci = rating.confidence_interval
         return {
-            'model': model_name,
-            'elo': round(rating.elo, 1),
-            'wins': rating.wins,
-            'losses': rating.losses,
-            'ties': rating.ties,
-            'total': rating.total_comparisons,
-            'win_rate': round(rating.win_rate * 100, 2),
-            'ci_95': [round(ci[0]*100, 1), round(ci[1]*100, 1)],
+            "model": model_name,
+            "elo": round(rating.elo, 1),
+            "wins": rating.wins,
+            "losses": rating.losses,
+            "ties": rating.ties,
+            "total": rating.total_comparisons,
+            "win_rate": round(rating.win_rate * 100, 2),
+            "ci_95": [round(ci[0] * 100, 1), round(ci[1] * 100, 1)],
         }
 
     def compute_agreement_rate(self) -> float:

@@ -11,7 +11,6 @@ import os
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from fastapi import HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -20,6 +19,7 @@ from loguru import logger
 try:
     from jose import JWTError, jwt
     from passlib.context import CryptContext
+
     JOSE_AVAILABLE = True
 except ImportError:
     JOSE_AVAILABLE = False
@@ -52,7 +52,7 @@ else:
     if not SECRET_KEY:
         raise RuntimeError(
             "FATAL: JWT_SECRET_KEY environment variable is not set. "
-            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+            'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
         )
     if len(SECRET_KEY) < 32:
         raise RuntimeError(
@@ -100,9 +100,7 @@ _rate_limit_store: dict[str, list[float]] = defaultdict(list)
 _revoked_tokens: set[str] = set()
 
 
-def verify_password(
-    plain_password: str, hashed_password: str
-) -> bool:
+def verify_password(plain_password: str, hashed_password: str) -> bool:
     if not JOSE_AVAILABLE:
         return True
     return pwd_context.verify(plain_password, hashed_password)
@@ -114,10 +112,7 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(
-    data: dict,
-    expires_delta: Optional[timedelta] = None
-) -> str:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     if not JOSE_AVAILABLE:
         return "dev-token"
 
@@ -131,13 +126,11 @@ def create_access_token(
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> Optional[dict]:
+def decode_token(token: str) -> dict | None:
     if not JOSE_AVAILABLE:
         return {"sub": "dev", "role": "admin"}
     try:
-        payload = jwt.decode(
-            token, SECRET_KEY, algorithms=[ALGORITHM]
-        )
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except JWTError:
         return None
@@ -153,8 +146,7 @@ def check_rate_limit(user_id: str) -> bool:
 
     # Clean old entries
     _rate_limit_store[user_id] = [
-        ts for ts in _rate_limit_store[user_id]
-        if ts > window_start
+        ts for ts in _rate_limit_store[user_id] if ts > window_start
     ]
 
     if len(_rate_limit_store[user_id]) >= RATE_LIMIT_REQUESTS:
@@ -166,7 +158,7 @@ def check_rate_limit(user_id: str) -> bool:
 
 async def get_current_user(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Security(security)
+    credentials: HTTPAuthorizationCredentials | None = Security(security),
 ) -> dict:
     """
     FastAPI dependency for authenticated routes.
@@ -185,60 +177,43 @@ async def get_current_user(
             user_info = _api_keys[api_key]
             user_id = user_info["user_id"]
             if not check_rate_limit(user_id):
-                raise HTTPException(
-                    status_code=429,
-                    detail="Rate limit exceeded"
-                )
+                raise HTTPException(status_code=429, detail="Rate limit exceeded")
             return user_info
 
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication required"
-        )
+        raise HTTPException(status_code=401, detail="Authentication required")
 
     token = credentials.credentials
 
     # Check revoked tokens
     if token in _revoked_tokens:
-        raise HTTPException(
-            status_code=401, detail="Token revoked"
-        )
+        raise HTTPException(status_code=401, detail="Token revoked")
 
     payload = decode_token(token)
     if not payload:
-        raise HTTPException(
-            status_code=401, detail="Invalid or expired token"
-        )
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     user_id = payload.get("sub")
     if not user_id:
-        raise HTTPException(
-            status_code=401, detail="Invalid token payload"
-        )
+        raise HTTPException(status_code=401, detail="Invalid token payload")
 
     if not check_rate_limit(user_id):
         raise HTTPException(
             status_code=429,
             detail=f"Rate limit exceeded: {RATE_LIMIT_REQUESTS} "
-                   f"requests per {RATE_LIMIT_WINDOW}s"
+            f"requests per {RATE_LIMIT_WINDOW}s",
         )
 
     return {
         "user_id": user_id,
         "role": payload.get("role", "user"),
-        "exp": payload.get("exp")
+        "exp": payload.get("exp"),
     }
 
 
-async def require_admin(
-    user: dict = Security(get_current_user)
-) -> dict:
+async def require_admin(user: dict = Security(get_current_user)) -> dict:
     """Dependency for admin-only routes."""
     if user.get("role") != "admin":
-        raise HTTPException(
-            status_code=403,
-            detail="Admin role required"
-        )
+        raise HTTPException(status_code=403, detail="Admin role required")
     return user
 
 

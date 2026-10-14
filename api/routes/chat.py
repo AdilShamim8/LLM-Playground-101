@@ -7,17 +7,18 @@ import asyncio
 import json
 import time
 import uuid
-from typing import AsyncIterator, Optional
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 from loguru import logger
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
 
 # ─── Request/Response Models ──────────────────────────────────────
+
 
 class Message(BaseModel):
     role: str = Field(..., pattern="^(system|user|assistant)$")
@@ -32,11 +33,10 @@ class ChatCompletionRequest(BaseModel):
     top_p: float = Field(default=0.9, ge=0.0, le=1.0)
     top_k: int = Field(default=50, ge=0, le=100)
     decoding_strategy: str = Field(
-        default="sampling",
-        pattern="^(sampling|greedy|beam_search)$"
+        default="sampling", pattern="^(sampling|greedy|beam_search)$"
     )
     stream: bool = False
-    stop: Optional[list[str]] = None
+    stop: list[str] | None = None
     repetition_penalty: float = Field(default=1.1, ge=1.0, le=2.0)
     n: int = Field(default=1, ge=1, le=5)
 
@@ -58,6 +58,7 @@ class ChatCompletionResponse(BaseModel):
 
 class ModelRegistry:
     """Simple in-memory model registry."""
+
     _models = {}
 
     @classmethod
@@ -66,11 +67,11 @@ class ModelRegistry:
             "model": model,
             "tokenizer": tokenizer,
             "generator": generator,
-            "loaded_at": time.time()
+            "loaded_at": time.time(),
         }
 
     @classmethod
-    def get(cls, name: str) -> Optional[dict]:
+    def get(cls, name: str) -> dict | None:
         return cls._models.get(name)
 
     @classmethod
@@ -87,9 +88,7 @@ def _format_messages_to_prompt(messages: list[Message]) -> str:
         elif msg.role == "user":
             prompt += f"<|im_start|>user\n{msg.content}<|im_end|>\n"
         elif msg.role == "assistant":
-            prompt += (
-                f"<|im_start|>assistant\n{msg.content}<|im_end|>\n"
-            )
+            prompt += f"<|im_start|>assistant\n{msg.content}<|im_end|>\n"
     prompt += "<|im_start|>assistant\n"
     return prompt
 
@@ -106,16 +105,18 @@ def _demo_response(messages: list[Message]) -> str:
     else:
         user_line = "Send a message to get a response."
 
-    return "\n".join([
-        "Demo mode: no model is loaded yet.",
-        "",
-        user_line,
-        "",
-        "To get real responses:",
-        "1) Load a model via POST /api/v1/models/load",
-        "2) Select it in the Model dropdown",
-        "3) Send your message again",
-    ])
+    return "\n".join(
+        [
+            "Demo mode: no model is loaded yet.",
+            "",
+            user_line,
+            "",
+            "To get real responses:",
+            "1) Load a model via POST /api/v1/models/load",
+            "2) Select it in the Model dropdown",
+            "3) Send your message again",
+        ]
+    )
 
 
 async def _stream_response(
@@ -182,20 +183,17 @@ async def _stream_response(
             token = item
 
             # Stop sequence check
-            if request.stop:
-                if any(stop in token for stop in request.stop):
-                    break
+            if request.stop and any(stop in token for stop in request.stop):
+                break
 
             chunk = {
                 "id": completion_id,
                 "object": "chat.completion.chunk",
                 "created": int(time.time()),
                 "model": request.model,
-                "choices": [{
-                    "index": 0,
-                    "delta": {"content": token},
-                    "finish_reason": None
-                }]
+                "choices": [
+                    {"index": 0, "delta": {"content": token}, "finish_reason": None}
+                ],
             }
             yield f"data: {json.dumps(chunk)}\n\n"
             await asyncio.sleep(0)  # Yield control to event loop
@@ -206,11 +204,7 @@ async def _stream_response(
             "object": "chat.completion.chunk",
             "created": int(time.time()),
             "model": request.model,
-            "choices": [{
-                "index": 0,
-                "delta": {},
-                "finish_reason": "stop"
-            }]
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
         }
         yield f"data: {json.dumps(final_chunk)}\n\n"
         yield "data: [DONE]\n\n"
@@ -222,10 +216,7 @@ async def _stream_response(
 
 
 @router.post("/chat/completions")
-async def chat_completions(
-    request: ChatCompletionRequest,
-    http_request: Request
-):
+async def chat_completions(request: ChatCompletionRequest, http_request: Request):
     """
     OpenAI-compatible chat completions endpoint.
     Supports streaming and batch responses.
@@ -238,6 +229,7 @@ async def chat_completions(
         # Fall back to demo mode
         demo_response = _demo_response(request.messages)
         if request.stream:
+
             async def demo_stream():
                 for word in demo_response.split():
                     chunk = {
@@ -245,38 +237,36 @@ async def chat_completions(
                         "object": "chat.completion.chunk",
                         "created": int(time.time()),
                         "model": request.model,
-                        "choices": [{
-                            "index": 0,
-                            "delta": {"content": word + " "},
-                            "finish_reason": None
-                        }]
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"content": word + " "},
+                                "finish_reason": None,
+                            }
+                        ],
                     }
                     yield f"data: {json.dumps(chunk)}\n\n"
                     await asyncio.sleep(0.05)
                 yield "data: [DONE]\n\n"
 
-            return StreamingResponse(
-                demo_stream(),
-                media_type="text/event-stream"
-            )
+            return StreamingResponse(demo_stream(), media_type="text/event-stream")
 
         return ChatCompletionResponse(
             id=completion_id,
             created=int(time.time()),
             model=request.model,
-            choices=[ChatCompletionChoice(
-                index=0,
-                message=Message(
-                    role="assistant",
-                    content=demo_response
-                ),
-                finish_reason="stop"
-            )],
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=Message(role="assistant", content=demo_response),
+                    finish_reason="stop",
+                )
+            ],
             usage={
                 "prompt_tokens": 0,
                 "completion_tokens": len(demo_response.split()),
-                "total_tokens": len(demo_response.split())
-            }
+                "total_tokens": len(demo_response.split()),
+            },
         )
 
     generator = model_info["generator"]
@@ -284,10 +274,8 @@ async def chat_completions(
 
     if request.stream:
         return StreamingResponse(
-            _stream_response(
-                generator, prompt, request, completion_id
-            ),
-            media_type="text/event-stream"
+            _stream_response(generator, prompt, request, completion_id),
+            media_type="text/event-stream",
         )
 
     # Non-streaming response
@@ -335,25 +323,24 @@ async def chat_completions(
             id=completion_id,
             created=int(time.time()),
             model=request.model,
-            choices=[ChatCompletionChoice(
-                index=0,
-                message=Message(
-                    role="assistant",
-                    content=response_text
-                ),
-                finish_reason="stop"
-            )],
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=Message(role="assistant", content=response_text),
+                    finish_reason="stop",
+                )
+            ],
             usage={
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": prompt_tokens + completion_tokens,
-                "latency_seconds": latency
-            }
+                "latency_seconds": latency,
+            },
         )
 
     except Exception as e:
         logger.error(f"Generation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/models")

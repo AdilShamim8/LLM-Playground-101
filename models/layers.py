@@ -3,13 +3,11 @@ Core neural network layers for Transformer architecture.
 Implements RMSNorm, RoPE, GQA, SwiGLU, and other modern components.
 """
 
-import math
-from typing import Optional
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataclasses import dataclass
 
 
 @dataclass
@@ -18,7 +16,7 @@ class ModelConfig:
     hidden_size: int = 768
     num_layers: int = 12
     num_heads: int = 12
-    num_kv_heads: int = 12          # For GQA (set < num_heads)
+    num_kv_heads: int = 12  # For GQA (set < num_heads)
     intermediate_size: int = 3072
     max_position_embeddings: int = 2048
     dropout: float = 0.1
@@ -34,7 +32,7 @@ class ModelConfig:
     pad_token_id: int = 0
     bos_token_id: int = 1
     eos_token_id: int = 2
-    architecture: str = "gpt"       # gpt | gemma | deepseek
+    architecture: str = "gpt"  # gpt | gemma | deepseek
 
 
 class RMSNorm(nn.Module):
@@ -59,23 +57,14 @@ class RMSNorm(nn.Module):
 class LayerNorm(nn.Module):
     """Standard LayerNorm with optional bias (GPT-2 style)."""
 
-    def __init__(
-        self,
-        hidden_size: int,
-        eps: float = 1e-5,
-        bias: bool = True
-    ):
+    def __init__(self, hidden_size: int, eps: float = 1e-5, bias: bool = True):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.bias = nn.Parameter(
-            torch.zeros(hidden_size)
-        ) if bias else None
+        self.bias = nn.Parameter(torch.zeros(hidden_size)) if bias else None
         self.eps = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.layer_norm(
-            x, x.shape[-1:], self.weight, self.bias, self.eps
-        )
+        return F.layer_norm(x, x.shape[-1:], self.weight, self.bias, self.eps)
 
 
 def build_norm(config: ModelConfig, hidden_size: int) -> nn.Module:
@@ -88,11 +77,11 @@ def build_norm(config: ModelConfig, hidden_size: int) -> nn.Module:
 class RotaryEmbedding(nn.Module):
     """
     Rotary Position Embedding (RoPE).
-    
+
     Encodes position information directly into Q, K vectors
     via rotation. Key property: relative positions encoded
     via dot product — no absolute position tokens needed.
-    
+
     Used in: GPT-NeoX, LLaMA, Gemma, DeepSeek, Qwen.
     """
 
@@ -101,7 +90,7 @@ class RotaryEmbedding(nn.Module):
         dim: int,
         max_position_embeddings: int = 2048,
         theta: float = 10000.0,
-        device: Optional[torch.device] = None
+        device: torch.device | None = None,
     ):
         super().__init__()
         self.dim = dim
@@ -110,32 +99,24 @@ class RotaryEmbedding(nn.Module):
 
         # Compute inverse frequencies: shape (dim/2,)
         inv_freq = 1.0 / (
-            theta ** (
-                torch.arange(0, dim, 2, dtype=torch.float32, device=device)
-                / dim
-            )
+            theta ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim)
         )
-        self.register_buffer('inv_freq', inv_freq, persistent=False)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
         self._build_cache(max_position_embeddings)
 
     def _build_cache(self, seq_len: int):
         t = torch.arange(
-            seq_len,
-            device=self.inv_freq.device,
-            dtype=self.inv_freq.dtype
+            seq_len, device=self.inv_freq.device, dtype=self.inv_freq.dtype
         )
         # Outer product: (seq_len, dim/2)
         freqs = torch.outer(t, self.inv_freq)
         # Concatenate to get (seq_len, dim)
         emb = torch.cat([freqs, freqs], dim=-1)
-        self.register_buffer('cos_cached', emb.cos(), persistent=False)
-        self.register_buffer('sin_cached', emb.sin(), persistent=False)
+        self.register_buffer("cos_cached", emb.cos(), persistent=False)
+        self.register_buffer("sin_cached", emb.sin(), persistent=False)
 
     def forward(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        position_ids: Optional[torch.Tensor] = None
+        self, q: torch.Tensor, k: torch.Tensor, position_ids: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         seq_len = q.shape[-2]
 
@@ -162,9 +143,7 @@ def rotate_half(x: torch.Tensor) -> torch.Tensor:
 
 
 def apply_rotary_emb(
-    x: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor
+    x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> torch.Tensor:
     """Apply RoPE to query or key tensor."""
     # x: (..., seq_len, dim)
@@ -178,29 +157,18 @@ def apply_rotary_emb(
 class SwiGLU(nn.Module):
     """
     SwiGLU activation function.
-    
+
     SwiGLU(x) = Swish(xW + b) ⊙ (xV + c)
-    
+
     Used in: PaLM, LLaMA, Gemma, DeepSeek.
     Outperforms ReLU/GELU in practice.
     """
 
-    def __init__(
-        self,
-        hidden_size: int,
-        intermediate_size: int,
-        bias: bool = False
-    ):
+    def __init__(self, hidden_size: int, intermediate_size: int, bias: bool = False):
         super().__init__()
-        self.gate_proj = nn.Linear(
-            hidden_size, intermediate_size, bias=bias
-        )
-        self.up_proj = nn.Linear(
-            hidden_size, intermediate_size, bias=bias
-        )
-        self.down_proj = nn.Linear(
-            intermediate_size, hidden_size, bias=bias
-        )
+        self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=bias)
+        self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=bias)
+        self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         gate = F.silu(self.gate_proj(x))
@@ -211,12 +179,7 @@ class SwiGLU(nn.Module):
 class GPT2MLP(nn.Module):
     """Standard GPT-2 MLP with GELU activation."""
 
-    def __init__(
-        self,
-        hidden_size: int,
-        intermediate_size: int,
-        dropout: float = 0.1
-    ):
+    def __init__(self, hidden_size: int, intermediate_size: int, dropout: float = 0.1):
         super().__init__()
         self.fc1 = nn.Linear(hidden_size, intermediate_size)
         self.fc2 = nn.Linear(intermediate_size, hidden_size)
@@ -234,12 +197,5 @@ class GPT2MLP(nn.Module):
 def build_mlp(config: ModelConfig) -> nn.Module:
     """Factory for MLP block."""
     if config.use_swiglu:
-        return SwiGLU(
-            config.hidden_size,
-            config.intermediate_size
-        )
-    return GPT2MLP(
-        config.hidden_size,
-        config.intermediate_size,
-        config.dropout
-    )
+        return SwiGLU(config.hidden_size, config.intermediate_size)
+    return GPT2MLP(config.hidden_size, config.intermediate_size, config.dropout)

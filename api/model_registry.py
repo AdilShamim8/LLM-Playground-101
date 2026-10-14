@@ -5,7 +5,6 @@ between chat.py and models.py.
 """
 
 import time
-from typing import Optional
 
 
 class ModelRegistry:
@@ -39,7 +38,7 @@ class ModelRegistry:
         }
 
     @classmethod
-    def get(cls, name: str) -> Optional[dict]:
+    def get(cls, name: str) -> dict | None:
         return cls._models.get(name)
 
     @classmethod

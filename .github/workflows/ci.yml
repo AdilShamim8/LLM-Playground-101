@@ -4,17 +4,19 @@
 #
 #  This workflow runs on every push and pull request to main.
 #  It performs:
-#    1. Linting (ruff) — catches style issues and common bugs
-#    2. Type checking (mypy) — catches type errors before runtime
-#    3. Tests (pytest) — runs the test suite
+#    1. Linting (ruff check + ruff format --check) — FAILS the build on issues
+#    2. Type checking (mypy) — warnings only, doesn't fail
+#    3. Tests (pytest) — runs core tests (models, generation, training)
 #
-#  Why CI matters:
-#  Without CI, bugs merge into main and are discovered later (in staging
-#  or production) when they're expensive to fix. CI catches them in the
-#  PR before merge, when the fix is cheap.
-#
-#  The jobs run in parallel (lint, type-check, test) to minimize runtime.
-#  PyTorch is installed separately because it's a large download.
+#  Design decisions:
+#  - Lint is a HARD GATE. If ruff fails, the build fails. No exceptions.
+#  - Tests only run the core suite (test_models, test_generation,
+#    test_training) that don't need heavy optional dependencies like
+#    trafilatura, flash-attn, or deepspeed. test_data.py requires
+#    trafilatura (web scraping lib) which is hard to install in CI.
+#  - PyTorch is installed CPU-only (much smaller: 200MB vs 2GB for CUDA).
+#  - mypy runs but is non-blocking (continue-on-error) until the codebase
+#    is fully typed.
 #
 
 name: CI
@@ -29,7 +31,8 @@ permissions:
   contents: read
 
 jobs:
-  # ─── Lint (Ruff) ───────────────────────────────────────────────────────
+  # ─── Lint (Ruff) — HARD GATE ───────────────────────────────────────────
+  # If this fails, the build fails. No exceptions.
   lint:
     name: Lint (Ruff)
     runs-on: ubuntu-latest
@@ -44,16 +47,17 @@ jobs:
       - name: Install ruff
         run: pip install ruff==0.1.13
 
-      - name: Run ruff check
+      - name: Run ruff check (lint rules)
         run: ruff check .
 
-      - name: Run ruff format check
+      - name: Run ruff format check (formatting)
         run: ruff format --check .
 
-  # ─── Type Check (MyPy) ────────────────────────────────────────────────
+  # ─── Type Check (MyPy) — non-blocking ──────────────────────────────────
   type-check:
     name: Type Check (MyPy)
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -65,11 +69,14 @@ jobs:
       - name: Install mypy
         run: pip install mypy==1.7.1
 
-      - name: Run mypy
+      - name: Run mypy (non-blocking)
         run: mypy .
-        continue-on-error: true  # Lenient: don't fail CI on type errors yet
+        continue-on-error: true
 
-  # ─── Tests ──────────────────────────────────────────────────────────
+  # ─── Tests — core suite only ───────────────────────────────────────────
+  # We run only test_models.py, test_generation.py, and test_training.py.
+  # test_data.py requires trafilatura (a heavy C-extension web scraping
+  # library) that is hard to install in CI and isn't core to the ML pipeline.
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -88,17 +95,23 @@ jobs:
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: ${{ runner.os }}-pip-
 
-      - name: Install dependencies
+      - name: Install CPU-only PyTorch
         run: |
           pip install --upgrade pip
-          # Install CPU-only PyTorch for CI (much smaller than CUDA version)
+          # CPU-only PyTorch: ~200MB vs ~2GB for CUDA version
           pip install torch==2.1.0 --index-url https://download.pytorch.org/whl/cpu
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
+
+      - name: Install test dependencies
+        # Only install what the core tests need. The full requirements.txt
+        # includes flash-attn and deepspeed which need system compilers.
+        run: |
+          pip install pytest pytest-cov pytest-asyncio
+          pip install pyyaml loguru numpy
 
       - name: Install package
-        run: pip install -e .
+        run: pip install -e . --no-deps
 
-      - name: Run tests
-        run: pytest tests/ -v --tb=short
-        continue-on-error: true  # Lenient: don't block PRs on test failures
+      - name: Run core tests
+        # Only run tests that don't need optional heavy dependencies.
+        # test_data.py needs trafilatura; skip it in CI.
+        run: pytest tests/test_models.py tests/test_generation.py tests/test_training.py -v --tb=short

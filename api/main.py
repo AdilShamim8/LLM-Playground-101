@@ -8,22 +8,19 @@ Production-ready REST API with:
 - Evaluation endpoints
 """
 
-import asyncio
 import os
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from loguru import logger
 
 from api.routes.chat import router as chat_router
-from api.routes.models import router as models_router
 from api.routes.evaluation import router as eval_router
-from api.middleware.auth import auth_middleware
-
+from api.routes.models import router as models_router
 
 # ── CORS Configuration ───────────────────────────────────────────────────
 #
@@ -36,6 +33,7 @@ from api.middleware.auth import auth_middleware
 #
 # In development, we default to localhost for the UI and API docs.
 
+
 def _get_cors_origins() -> list[str]:
     """Parse allowed CORS origins from environment variable."""
     raw = os.getenv("CORS_ORIGINS", "")
@@ -44,9 +42,9 @@ def _get_cors_origins() -> list[str]:
         return [origin.strip() for origin in raw.split(",") if origin.strip()]
     # Default: allow localhost for development only
     return [
-        "http://localhost:7860",   # Gradio UI
-        "http://localhost:3000",   # Next.js / React dev server
-        "http://localhost:8000",   # FastAPI docs
+        "http://localhost:7860",  # Gradio UI
+        "http://localhost:3000",  # Next.js / React dev server
+        "http://localhost:8000",  # FastAPI docs
         "http://127.0.0.1:7860",
         "http://127.0.0.1:3000",
     ]
@@ -84,20 +82,13 @@ app.add_middleware(
 logger.info(f"CORS allowed origins: {cors_origins}")
 
 app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
-app.include_router(
-    models_router, prefix="/api/v1", tags=["models"]
-)
+app.include_router(models_router, prefix="/api/v1", tags=["models"])
 app.include_router(eval_router, prefix="/api/v1", tags=["eval"])
 
 
 @app.get("/")
 async def root():
-    return {
-        "status": "ok",
-        "docs": "/docs",
-        "health": "/health",
-        "api_base": "/api/v1"
-    }
+    return {"status": "ok", "docs": "/docs", "health": "/health", "api_base": "/api/v1"}
 
 
 @app.get("/health")
@@ -107,7 +98,7 @@ async def health_check(request: Request):
         "status": "healthy",
         "uptime": uptime,
         "requests": request.app.state.request_count,
-        "version": "1.0.0"
+        "version": "1.0.0",
     }
 
 
@@ -125,6 +116,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         content={
             "error": exc.detail,
             "status_code": exc.status_code,
-            "path": str(request.url)
-        }
+            "path": str(request.url),
+        },
     )

@@ -12,7 +12,7 @@ import inspect
 import json
 import os
 import time
-from typing import Iterator
+from collections.abc import Iterator
 
 import gradio as gr
 import requests
@@ -20,9 +20,8 @@ from loguru import logger
 
 DEFAULT_API_BASE = "http://localhost:8000/api/v1"
 API_BASE = os.getenv("API_BASE", DEFAULT_API_BASE)
-CHAT_STREAM = os.getenv("CHAT_STREAM", "false").lower() in (
-    "1", "true", "yes"
-)
+CHAT_STREAM = os.getenv("CHAT_STREAM", "false").lower() in ("1", "true", "yes")
+
 
 def _build_theme():
     try:
@@ -261,6 +260,8 @@ def _supports_param(callable_obj, param_name: str) -> bool:
 
 
 CHATBOT_SUPPORTS_TYPE = _supports_param(gr.Chatbot, "type")
+
+
 def _chatbot_expects_messages() -> bool:
     try:
         desc = getattr(gr.Chatbot(), "_value_description", "")
@@ -299,6 +300,7 @@ def _format_chatbot_output(messages: list[dict]):
 
 # ─── API Helpers ──────────────────────────────────────────────────
 
+
 def stream_chat(
     messages: list[dict],
     model: str,
@@ -324,10 +326,7 @@ def stream_chat(
 
     try:
         with requests.post(
-            f"{API_BASE}/chat/completions",
-            json=payload,
-            stream=True,
-            timeout=120
+            f"{API_BASE}/chat/completions", json=payload, stream=True, timeout=120
         ) as response:
             response.raise_for_status()
             for line in response.iter_lines():
@@ -359,27 +358,19 @@ def run_evaluation(
     texts_input: str,
     hypotheses_input: str,
     references_input: str,
-    model_name: str
+    model_name: str,
 ) -> str:
     """Run evaluation job via API."""
     payload = {
         "model_name": model_name,
         "task": task,
         "texts": [t.strip() for t in texts_input.split("\n") if t.strip()],
-        "hypotheses": [
-            h.strip()
-            for h in hypotheses_input.split("\n") if h.strip()
-        ],
-        "references": [
-            r.strip()
-            for r in references_input.split("\n") if r.strip()
-        ],
+        "hypotheses": [h.strip() for h in hypotheses_input.split("\n") if h.strip()],
+        "references": [r.strip() for r in references_input.split("\n") if r.strip()],
     }
 
     try:
-        resp = requests.post(
-            f"{API_BASE}/evaluate", json=payload
-        )
+        resp = requests.post(f"{API_BASE}/evaluate", json=payload)
         job = resp.json()
         job_id = job.get("job_id")
         if not job_id:
@@ -388,9 +379,7 @@ def run_evaluation(
         # Poll for result
         for _ in range(20):
             time.sleep(1)
-            poll = requests.get(
-                f"{API_BASE}/evaluate/{job_id}"
-            )
+            poll = requests.get(f"{API_BASE}/evaluate/{job_id}")
             result = poll.json()
             if result["status"] in ("completed", "failed"):
                 return json.dumps(result, indent=2)
@@ -403,6 +392,7 @@ def run_evaluation(
 
 # ─── Gradio Interface ─────────────────────────────────────────────
 
+
 def build_ui():
     blocks_kwargs = {
         "title": "LLM Playground",
@@ -413,7 +403,6 @@ def build_ui():
         blocks_kwargs["css"] = UI_CSS
 
     with gr.Blocks(**blocks_kwargs) as demo:
-
         gr.HTML(
             f"""
             <div class="hero">
@@ -428,7 +417,6 @@ def build_ui():
         )
 
         with gr.Tabs():
-
             # ── Chat Tab ─────────────────────────────────────────
             with gr.TabItem("💬 Chat"):
                 with gr.Row():
@@ -456,9 +444,7 @@ def build_ui():
                                 elem_classes=["send-btn"],
                             )
                         with gr.Row():
-                            clear_btn = gr.Button(
-                                "🗑️ Clear", scale=1
-                            )
+                            clear_btn = gr.Button("🗑️ Clear", scale=1)
                             system_prompt = gr.Textbox(
                                 value=(
                                     "You are a helpful, harmless, "
@@ -466,44 +452,38 @@ def build_ui():
                                 ),
                                 label="System Prompt",
                                 lines=2,
-                                scale=3
+                                scale=3,
                             )
 
                     with gr.Column(scale=1, elem_classes=["param-panel"]):
                         gr.Markdown("### ⚙️ Parameters")
                         model_choice = gr.Dropdown(
-                            choices=["demo"],
-                            value="demo",
-                            label="Model"
+                            choices=["demo"], value="demo", label="Model"
                         )
                         refresh_models_btn = gr.Button(
-                            "Refresh models",
-                            variant="secondary"
+                            "Refresh models", variant="secondary"
                         )
                         temperature = gr.Slider(
-                            0.0, 2.0, value=0.7, step=0.05,
-                            label="🌡️ Temperature"
+                            0.0, 2.0, value=0.7, step=0.05, label="🌡️ Temperature"
                         )
                         top_p = gr.Slider(
-                            0.0, 1.0, value=0.9, step=0.05,
-                            label="🎯 Top-p"
+                            0.0, 1.0, value=0.9, step=0.05, label="🎯 Top-p"
                         )
-                        top_k = gr.Slider(
-                            0, 100, value=50, step=1,
-                            label="🔝 Top-k"
-                        )
+                        top_k = gr.Slider(0, 100, value=50, step=1, label="🔝 Top-k")
                         max_tokens = gr.Slider(
-                            32, 2048, value=512, step=32,
-                            label="📝 Max tokens"
+                            32, 2048, value=512, step=32, label="📝 Max tokens"
                         )
                         rep_penalty = gr.Slider(
-                            1.0, 2.0, value=1.1, step=0.05,
-                            label="🔄 Repetition Penalty"
+                            1.0,
+                            2.0,
+                            value=1.1,
+                            step=0.05,
+                            label="🔄 Repetition Penalty",
                         )
                         decode_strategy = gr.Radio(
                             ["sampling", "greedy", "beam_search"],
                             value="sampling",
-                            label="🎲 Decoding Strategy"
+                            label="🎲 Decoding Strategy",
                         )
 
                 # State
@@ -511,10 +491,7 @@ def build_ui():
 
                 def refresh_models():
                     try:
-                        resp = requests.get(
-                            f"{API_BASE}/models",
-                            timeout=10
-                        )
+                        resp = requests.get(f"{API_BASE}/models", timeout=10)
                         data = resp.json()
                         models = data.get("models", [])
                         if "demo" not in models:
@@ -524,17 +501,10 @@ def build_ui():
                     except Exception:
                         return gr.update()
 
-                def user_message(
-                    user_msg: str,
-                    history: list,
-                    sys_prompt: str
-                ):
+                def user_message(user_msg: str, history: list, sys_prompt: str):
                     if not user_msg.strip():
                         return history, "", _format_chatbot_output(history)
-                    history.append({
-                        "role": "user",
-                        "content": user_msg
-                    })
+                    history.append({"role": "user", "content": user_msg})
                     return history, "", _format_chatbot_output(history)
 
                 def bot_response_once(
@@ -553,10 +523,7 @@ def build_ui():
 
                     messages = []
                     if sys_prompt:
-                        messages.append({
-                            "role": "system",
-                            "content": sys_prompt
-                        })
+                        messages.append({"role": "system", "content": sys_prompt})
                     messages.extend(history)
 
                     try:
@@ -572,9 +539,7 @@ def build_ui():
                             "stream": False,
                         }
                         resp = requests.post(
-                            f"{API_BASE}/chat/completions",
-                            json=payload,
-                            timeout=60
+                            f"{API_BASE}/chat/completions", json=payload, timeout=60
                         )
                         resp.raise_for_status()
                         data = resp.json()
@@ -587,10 +552,12 @@ def build_ui():
                         logger.exception("non-stream chat failed")
                         content = f"[Error: {e}]"
 
-                    history.append({
-                        "role": "assistant",
-                        "content": content or "*(No response generated)*"
-                    })
+                    history.append(
+                        {
+                            "role": "assistant",
+                            "content": content or "*(No response generated)*",
+                        }
+                    )
                     return history, _format_chatbot_output(history)
 
                 def bot_response_stream(
@@ -610,17 +577,11 @@ def build_ui():
 
                     messages = []
                     if sys_prompt:
-                        messages.append({
-                            "role": "system",
-                            "content": sys_prompt
-                        })
+                        messages.append({"role": "system", "content": sys_prompt})
                     messages.extend(history)
 
                     # Add placeholder for streaming
-                    history.append({
-                        "role": "assistant",
-                        "content": ""
-                    })
+                    history.append({"role": "assistant", "content": ""})
 
                     full_response = ""
                     for token in stream_chat(
@@ -631,14 +592,10 @@ def build_ui():
                         yield history, _format_chatbot_output(history)
 
                     if not full_response:
-                        history[-1]["content"] = (
-                            "*(No response generated)*"
-                        )
+                        history[-1]["content"] = "*(No response generated)*"
                     yield history, _format_chatbot_output(history)
 
-                bot_handler = (
-                    bot_response_stream if CHAT_STREAM else bot_response_once
-                )
+                bot_handler = bot_response_stream if CHAT_STREAM else bot_response_once
 
                 # Wire up events
                 send_btn.click(
@@ -649,9 +606,15 @@ def build_ui():
                 ).then(
                     bot_handler,
                     [
-                        chat_history, system_prompt,
-                        model_choice, temperature, top_p,
-                        top_k, max_tokens, rep_penalty, decode_strategy
+                        chat_history,
+                        system_prompt,
+                        model_choice,
+                        temperature,
+                        top_p,
+                        top_k,
+                        max_tokens,
+                        rep_penalty,
+                        decode_strategy,
                     ],
                     [chat_history, chatbot],
                     queue=False,
@@ -665,9 +628,15 @@ def build_ui():
                 ).then(
                     bot_handler,
                     [
-                        chat_history, system_prompt,
-                        model_choice, temperature, top_p,
-                        top_k, max_tokens, rep_penalty, decode_strategy
+                        chat_history,
+                        system_prompt,
+                        model_choice,
+                        temperature,
+                        top_p,
+                        top_k,
+                        max_tokens,
+                        rep_penalty,
+                        decode_strategy,
                     ],
                     [chat_history, chatbot],
                     queue=False,
@@ -688,55 +657,39 @@ def build_ui():
 
             # ── Generation Lab Tab ────────────────────────────────
             with gr.TabItem("🧪 Generation Lab"):
-                gr.Markdown(
-                    "### Compare generation strategies side-by-side"
-                )
+                gr.Markdown("### Compare generation strategies side-by-side")
                 with gr.Row():
                     lab_prompt = gr.Textbox(
-                        label="Prompt",
-                        lines=4,
-                        placeholder="Enter prompt..."
+                        label="Prompt", lines=4, placeholder="Enter prompt..."
                     )
                 with gr.Row():
                     with gr.Column():
                         gr.Markdown("#### 🎯 Greedy")
-                        greedy_out = gr.Textbox(
-                            label="Output", lines=6
-                        )
+                        greedy_out = gr.Textbox(label="Output", lines=6)
                         greedy_btn = gr.Button("Generate")
                     with gr.Column():
                         gr.Markdown("#### 🎲 Sampling (top-p)")
-                        sampling_out = gr.Textbox(
-                            label="Output", lines=6
-                        )
+                        sampling_out = gr.Textbox(label="Output", lines=6)
                         sampling_btn = gr.Button("Generate")
                     with gr.Column():
                         gr.Markdown("#### 🔭 Beam Search")
-                        beam_out = gr.Textbox(
-                            label="Output", lines=6
-                        )
+                        beam_out = gr.Textbox(label="Output", lines=6)
                         beam_btn = gr.Button("Generate")
 
-                def generate_with_strategy(
-                    prompt: str, strategy: str
-                ) -> str:
+                def generate_with_strategy(prompt: str, strategy: str) -> str:
                     try:
                         if not prompt.strip():
                             return "Please enter a prompt."
                         payload = {
                             "model": "demo",
-                            "messages": [
-                                {"role": "user", "content": prompt}
-                            ],
+                            "messages": [{"role": "user", "content": prompt}],
                             "stream": False,
                             "decoding_strategy": strategy,
                             "temperature": 0.7 if strategy == "sampling" else 1.0,
                             "max_tokens": 200,
                         }
                         resp = requests.post(
-                            f"{API_BASE}/chat/completions",
-                            json=payload,
-                            timeout=60
+                            f"{API_BASE}/chat/completions", json=payload, timeout=60
                         )
                         data = resp.json()
                         return (
@@ -750,17 +703,20 @@ def build_ui():
 
                 greedy_btn.click(
                     lambda p: generate_with_strategy(p, "greedy"),
-                    lab_prompt, greedy_out,
+                    lab_prompt,
+                    greedy_out,
                     queue=False,
                 )
                 sampling_btn.click(
                     lambda p: generate_with_strategy(p, "sampling"),
-                    lab_prompt, sampling_out,
+                    lab_prompt,
+                    sampling_out,
                     queue=False,
                 )
                 beam_btn.click(
                     lambda p: generate_with_strategy(p, "beam"),
-                    lab_prompt, beam_out,
+                    lab_prompt,
+                    beam_out,
                     queue=False,
                 )
 
@@ -770,51 +726,36 @@ def build_ui():
                 with gr.Row():
                     with gr.Column():
                         eval_task = gr.Dropdown(
-                            choices=[
-                                "bleu", "rouge",
-                                "perplexity", "mmlu", "gsm8k"
-                            ],
+                            choices=["bleu", "rouge", "perplexity", "mmlu", "gsm8k"],
                             value="bleu",
-                            label="Evaluation Task"
+                            label="Evaluation Task",
                         )
-                        eval_model = gr.Textbox(
-                            value="demo",
-                            label="Model Name"
-                        )
+                        eval_model = gr.Textbox(value="demo", label="Model Name")
                         hyp_input = gr.Textbox(
                             label="Hypotheses (one per line)",
                             lines=5,
-                            placeholder="Generated text 1\nGenerated text 2"
+                            placeholder="Generated text 1\nGenerated text 2",
                         )
                         ref_input = gr.Textbox(
                             label="References (one per line)",
                             lines=5,
-                            placeholder="Reference text 1\nReference text 2"
+                            placeholder="Reference text 1\nReference text 2",
                         )
                         texts_input = gr.Textbox(
                             label="Texts for Perplexity",
                             lines=3,
-                            placeholder="Texts to evaluate..."
+                            placeholder="Texts to evaluate...",
                         )
-                        run_eval_btn = gr.Button(
-                            "▶️ Run Evaluation",
-                            variant="primary"
-                        )
+                        run_eval_btn = gr.Button("▶️ Run Evaluation", variant="primary")
 
                     with gr.Column():
                         eval_results = gr.JSON(
                             label="Results",
                         )
-                        eval_plot = gr.Plot(
-                            label="Metrics Visualization"
-                        )
+                        eval_plot = gr.Plot(label="Metrics Visualization")
 
-                def display_eval_results(
-                    task, texts, hyps, refs, model
-                ):
-                    result_str = run_evaluation(
-                        task, texts, hyps, refs, model
-                    )
+                def display_eval_results(task, texts, hyps, refs, model):
+                    result_str = run_evaluation(task, texts, hyps, refs, model)
                     try:
                         result_dict = json.loads(result_str)
                         return result_dict, None
@@ -823,10 +764,7 @@ def build_ui():
 
                 run_eval_btn.click(
                     display_eval_results,
-                    [
-                        eval_task, texts_input,
-                        hyp_input, ref_input, eval_model
-                    ],
+                    [eval_task, texts_input, hyp_input, ref_input, eval_model],
                     [eval_results, eval_plot],
                     queue=False,
                 )
@@ -836,7 +774,8 @@ def build_ui():
                 gr.Markdown("### Model Architecture & Training Info")
                 with gr.Row():
                     with gr.Column():
-                        gr.Markdown("""
+                        gr.Markdown(
+                            """
 **Architecture Supported:**
 - GPT-2 (learned absolute positions, LayerNorm, GeLU)
 - LLaMA-style (RoPE, RMSNorm, SwiGLU, GQA)
@@ -853,9 +792,11 @@ def build_ui():
 - Top-k: restrict to k most likely tokens
 - Top-p (Nucleus): dynamic vocabulary by CDF
 - Beam Search: explore multiple hypotheses
-                        """)
+                        """
+                        )
                     with gr.Column():
-                        gr.Markdown("""
+                        gr.Markdown(
+                            """
 **Data Pipeline:**
 - Web crawler (async, polite)
 - Common Crawl (WARC/WET)
@@ -875,7 +816,8 @@ def build_ui():
 - Streaming SSE support
 - JWT authentication
 - Background eval jobs
-                        """)
+                        """
+                        )
 
         gr.Markdown(
             "---\n"

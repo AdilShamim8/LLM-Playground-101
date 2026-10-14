@@ -8,32 +8,32 @@ Production features:
 - Multi-turn conversation support
 """
 
-import os
 import json
-import math
+import os
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
 from loguru import logger
+from torch.utils.data import DataLoader, Dataset
 
 try:
     from peft import (
         LoraConfig,
-        get_peft_model,
         TaskType,
-        prepare_model_for_kbit_training
+        get_peft_model,
+        prepare_model_for_kbit_training,  # noqa: F401 — kept for future k-bit training
     )
+
     PEFT_AVAILABLE = True
 except ImportError:
     PEFT_AVAILABLE = False
 
 try:
     import wandb
+
     WANDB_AVAILABLE = True
 except ImportError:
     WANDB_AVAILABLE = False
@@ -60,10 +60,17 @@ class SFTConfig:
     lora_r: int = 16
     lora_alpha: int = 32
     lora_dropout: float = 0.05
-    lora_target_modules: list = field(default_factory=lambda: [
-        "q_proj", "k_proj", "v_proj", "out_proj",
-        "gate_proj", "up_proj", "down_proj"
-    ])
+    lora_target_modules: list = field(
+        default_factory=lambda: [
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "out_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ]
+    )
 
     # Precision
     bf16: bool = True
@@ -80,9 +87,7 @@ class SFTConfig:
     wandb_run_name: str = "sft"
 
     # Chat template
-    system_prompt: str = (
-        "You are a helpful, harmless, and honest AI assistant."
-    )
+    system_prompt: str = "You are a helpful, harmless, and honest AI assistant."
 
 
 # ─── Chat Templates ───────────────────────────────────────────────
@@ -121,30 +126,23 @@ class ChatFormatter:
     proper templates and loss masking positions.
     """
 
-    def __init__(
-        self,
-        template: str = "chatml",
-        system_prompt: str = ""
-    ):
+    def __init__(self, template: str = "chatml", system_prompt: str = ""):
         self.template = CHAT_TEMPLATES.get(template, CHAT_TEMPLATES["chatml"])
         self.system_prompt = system_prompt
         self.template_name = template
 
     def format_conversation(
-        self,
-        messages: list[dict],
-        tokenizer,
-        max_length: int = 2048
+        self, messages: list[dict], tokenizer, max_length: int = 2048
     ) -> dict:
         """
         Format multi-turn conversation and compute loss mask.
         Loss mask: 1 for assistant tokens, 0 for everything else.
-        
+
         Args:
             messages: [{"role": "user/assistant/system", "content": "..."}]
             tokenizer: BPE tokenizer
             max_length: Maximum sequence length
-            
+
         Returns:
             dict with input_ids, labels, attention_mask
         """
@@ -154,30 +152,18 @@ class ChatFormatter:
 
         # Add system message
         if self.system_prompt:
-            full_text += (
-                tmpl["system_start"]
-                + self.system_prompt
-                + tmpl["system_end"]
-            )
+            full_text += tmpl["system_start"] + self.system_prompt + tmpl["system_end"]
 
         for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
 
             if role == "system":
-                full_text += (
-                    tmpl["system_start"]
-                    + content
-                    + tmpl["system_end"]
-                )
+                full_text += tmpl["system_start"] + content + tmpl["system_end"]
             elif role == "user":
-                full_text += (
-                    tmpl["user_start"]
-                    + content
-                    + tmpl["user_end"]
-                )
+                full_text += tmpl["user_start"] + content + tmpl["user_end"]
             elif role == "assistant":
-                start = len(full_text) + len(tmpl["assistant_start"])
+                len(full_text) + len(tmpl["assistant_start"])
                 full_text += tmpl["assistant_start"]
                 content_start = len(full_text)
                 full_text += content + tmpl["assistant_end"]
@@ -185,9 +171,7 @@ class ChatFormatter:
                 assistant_ranges.append((content_start, content_end))
 
         # Tokenize full text
-        token_ids = tokenizer.encode(
-            full_text, add_special_tokens=False
-        )[:max_length]
+        token_ids = tokenizer.encode(full_text, add_special_tokens=False)[:max_length]
 
         # Build labels with masking
         # We do character-level -> token-level mapping
@@ -196,20 +180,15 @@ class ChatFormatter:
         # Simple heuristic: find assistant token ranges
         # by encoding prefix and suffix
         char_pos = 0
-        token_pos = 0
         cumulative_ids = []
 
         for i, token_id in enumerate(token_ids):
-            token_str = tokenizer.decode(
-                [token_id], skip_special_tokens=False
-            )
+            tokenizer.decode([token_id], skip_special_tokens=False)
             cumulative_ids.append(token_id)
-            decoded_so_far = tokenizer.decode(
-                cumulative_ids, skip_special_tokens=False
-            )
+            decoded_so_far = tokenizer.decode(cumulative_ids, skip_special_tokens=False)
             curr_char_pos = len(decoded_so_far)
 
-            for (a_start, a_end) in assistant_ranges:
+            for a_start, a_end in assistant_ranges:
                 if char_pos >= a_start and char_pos < a_end:
                     labels[i] = token_id
                     break
@@ -237,7 +216,7 @@ class ChatFormatter:
         response: str,
         input_text: str = "",
         tokenizer=None,
-        max_length: int = 2048
+        max_length: int = 2048,
     ) -> dict:
         """Format alpaca-style instruction tuning examples."""
         if self.template_name == "alpaca":
@@ -254,9 +233,7 @@ class ChatFormatter:
                 {"role": "user", "content": instruction},
                 {"role": "assistant", "content": response},
             ]
-            return self.format_conversation(
-                messages, tokenizer, max_length
-            )
+            return self.format_conversation(messages, tokenizer, max_length)
 
         if tokenizer:
             return self.format_conversation(
@@ -265,7 +242,7 @@ class ChatFormatter:
                     {"role": "assistant", "content": response},
                 ],
                 tokenizer,
-                max_length
+                max_length,
             )
         return {"text": text}
 
@@ -279,35 +256,23 @@ class SFTDataset(Dataset):
     """
 
     def __init__(
-        self,
-        data_path: str,
-        tokenizer,
-        config: SFTConfig,
-        split: str = "train"
+        self, data_path: str, tokenizer, config: SFTConfig, split: str = "train"
     ):
         self.tokenizer = tokenizer
         self.config = config
-        self.formatter = ChatFormatter(
-            system_prompt=config.system_prompt
-        )
+        self.formatter = ChatFormatter(system_prompt=config.system_prompt)
         self.examples = self._load_data(data_path, split)
-        logger.info(
-            f"SFT Dataset [{split}]: {len(self.examples)} examples"
-        )
+        logger.info(f"SFT Dataset [{split}]: {len(self.examples)} examples")
 
-    def _load_data(
-        self, data_path: str, split: str
-    ) -> list[dict]:
+    def _load_data(self, data_path: str, split: str) -> list[dict]:
         examples = []
         filepath = os.path.join(data_path, f"{split}.jsonl")
 
         if not os.path.exists(filepath):
-            logger.warning(
-                f"No data at {filepath}. Using demo data."
-            )
+            logger.warning(f"No data at {filepath}. Using demo data.")
             return self._demo_data()
 
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -322,15 +287,13 @@ class SFTDataset(Dataset):
 
         return examples
 
-    def _process_item(self, item: dict) -> Optional[dict]:
+    def _process_item(self, item: dict) -> dict | None:
         """Process a single data item into token format."""
         # Support multiple formats
         if "messages" in item:
             # Conversational format
             return self.formatter.format_conversation(
-                item["messages"],
-                self.tokenizer,
-                self.config.max_length
+                item["messages"], self.tokenizer, self.config.max_length
             )
         elif "instruction" in item and "output" in item:
             # Alpaca format
@@ -339,7 +302,7 @@ class SFTDataset(Dataset):
                 response=item["output"],
                 input_text=item.get("input", ""),
                 tokenizer=self.tokenizer,
-                max_length=self.config.max_length
+                max_length=self.config.max_length,
             )
         elif "prompt" in item and "response" in item:
             # Simple prompt-response
@@ -362,7 +325,7 @@ class SFTDataset(Dataset):
                     "intelligence that enables systems to learn "
                     "and improve from experience without being "
                     "explicitly programmed."
-                )
+                ),
             },
             {
                 "instruction": "Write a Python function to reverse a string.",
@@ -371,12 +334,11 @@ class SFTDataset(Dataset):
                     "    return s[::-1]\n\n"
                     "# Example:\n"
                     "print(reverse_string('hello'))  # 'olleh'"
-                )
+                ),
             },
         ]
         return [
-            self._process_item(ex) for ex in demo_examples
-            if self._process_item(ex)
+            self._process_item(ex) for ex in demo_examples if self._process_item(ex)
         ]
 
     def __len__(self) -> int:
@@ -385,15 +347,9 @@ class SFTDataset(Dataset):
     def __getitem__(self, idx: int) -> dict:
         ex = self.examples[idx]
         return {
-            "input_ids": torch.tensor(
-                ex["input_ids"], dtype=torch.long
-            ),
-            "labels": torch.tensor(
-                ex["labels"], dtype=torch.long
-            ),
-            "attention_mask": torch.tensor(
-                ex["attention_mask"], dtype=torch.long
-            ),
+            "input_ids": torch.tensor(ex["input_ids"], dtype=torch.long),
+            "labels": torch.tensor(ex["labels"], dtype=torch.long),
+            "attention_mask": torch.tensor(ex["attention_mask"], dtype=torch.long),
         }
 
 
@@ -403,12 +359,7 @@ class SFTTrainer:
     Supports full fine-tuning and LoRA.
     """
 
-    def __init__(
-        self,
-        model: nn.Module,
-        tokenizer,
-        config: SFTConfig
-    ):
+    def __init__(self, model: nn.Module, tokenizer, config: SFTConfig):
         self.config = config
         self.tokenizer = tokenizer
         self.global_step = 0
@@ -432,7 +383,7 @@ class SFTTrainer:
             wandb.init(
                 project=config.wandb_project,
                 name=config.wandb_run_name,
-                config=vars(config)
+                config=vars(config),
             )
 
     def _apply_lora(self, model: nn.Module) -> nn.Module:
@@ -446,9 +397,7 @@ class SFTTrainer:
             bias="none",
         )
         model = get_peft_model(model, lora_config)
-        trainable = sum(
-            p.numel() for p in model.parameters() if p.requires_grad
-        )
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
         total = sum(p.numel() for p in model.parameters())
         logger.info(
             f"LoRA applied | Trainable: {trainable/1e6:.2f}M "
@@ -470,20 +419,15 @@ class SFTTrainer:
 
         return torch.optim.AdamW(
             [
-                {"params": decay_params,
-                 "weight_decay": self.config.weight_decay},
+                {"params": decay_params, "weight_decay": self.config.weight_decay},
                 {"params": no_decay_params, "weight_decay": 0.0},
             ],
             lr=self.config.learning_rate,
             betas=(0.9, 0.999),
-            eps=1e-8
+            eps=1e-8,
         )
 
-    def _compute_loss(
-        self,
-        logits: torch.Tensor,
-        labels: torch.Tensor
-    ) -> torch.Tensor:
+    def _compute_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         """
         Cross-entropy loss with label masking.
         Only computes loss on assistant tokens (label != -100).
@@ -495,15 +439,11 @@ class SFTTrainer:
             shift_logits.view(-1, shift_logits.size(-1)),
             shift_labels.view(-1),
             ignore_index=-100,
-            reduction="mean"
+            reduction="mean",
         )
         return loss
 
-    def train(
-        self,
-        train_dataset: SFTDataset,
-        val_dataset: Optional[SFTDataset] = None
-    ):
+    def train(self, train_dataset: SFTDataset, val_dataset: SFTDataset | None = None):
         config = self.config
 
         train_loader = DataLoader(
@@ -512,14 +452,12 @@ class SFTTrainer:
             shuffle=True,
             num_workers=4,
             pin_memory=True,
-            drop_last=True
+            drop_last=True,
         )
 
         optimizer = self._build_optimizer()
         total_steps = (
-            len(train_loader)
-            * config.num_epochs
-            // config.gradient_accumulation_steps
+            len(train_loader) * config.num_epochs // config.gradient_accumulation_steps
         )
         warmup_steps = int(total_steps * config.warmup_ratio)
 
@@ -534,7 +472,7 @@ class SFTTrainer:
         autocast_ctx = torch.autocast(
             device_type="cuda",
             dtype=torch.bfloat16 if config.bf16 else torch.float16,
-            enabled=config.bf16 or config.fp16
+            enabled=config.bf16 or config.fp16,
         )
 
         logger.info(
@@ -579,8 +517,7 @@ class SFTTrainer:
                     if self.global_step % config.logging_steps == 0:
                         lr = scheduler.get_last_lr()[0]
                         actual_loss = (
-                            epoch_loss * config.gradient_accumulation_steps
-                            / (step + 1)
+                            epoch_loss * config.gradient_accumulation_steps / (step + 1)
                         )
                         elapsed = time.time() - t0
                         logger.info(
@@ -591,23 +528,20 @@ class SFTTrainer:
                             f"Time: {elapsed:.1f}s"
                         )
                         if WANDB_AVAILABLE:
-                            wandb.log({
-                                "sft/loss": actual_loss,
-                                "sft/lr": lr,
-                                "sft/step": self.global_step,
-                            })
+                            wandb.log(
+                                {
+                                    "sft/loss": actual_loss,
+                                    "sft/lr": lr,
+                                    "sft/step": self.global_step,
+                                }
+                            )
 
-                    if (
-                        val_dataset
-                        and self.global_step % config.eval_steps == 0
-                    ):
+                    if val_dataset and self.global_step % config.eval_steps == 0:
                         val_loss = self._evaluate(val_dataset)
-                        logger.info(
-                            f"Val Loss: {val_loss:.4f}"
-                        )
+                        logger.info(f"Val Loss: {val_loss:.4f}")
                         if val_loss < best_val_loss:
                             best_val_loss = val_loss
-                            self._save(f"best")
+                            self._save("best")
 
                     if self.global_step % config.save_steps == 0:
                         self._save(f"step-{self.global_step}")
@@ -615,14 +549,10 @@ class SFTTrainer:
         self._save("final")
         if WANDB_AVAILABLE:
             wandb.finish()
-        logger.info(
-            f"SFT complete. Best val loss: {best_val_loss:.4f}"
-        )
+        logger.info(f"SFT complete. Best val loss: {best_val_loss:.4f}")
 
     def _evaluate(self, val_dataset: SFTDataset) -> float:
-        val_loader = DataLoader(
-            val_dataset, batch_size=self.config.batch_size
-        )
+        val_loader = DataLoader(val_dataset, batch_size=self.config.batch_size)
         self.model.eval()
         total_loss = 0.0
         n = 0
@@ -645,15 +575,10 @@ class SFTTrainer:
         save_dir = os.path.join(self.config.output_dir, tag)
         os.makedirs(save_dir, exist_ok=True)
         model_to_save = (
-            self.model.module
-            if hasattr(self.model, "module")
-            else self.model
+            self.model.module if hasattr(self.model, "module") else self.model
         )
         if PEFT_AVAILABLE and hasattr(model_to_save, "save_pretrained"):
             model_to_save.save_pretrained(save_dir)
         else:
-            torch.save(
-                model_to_save.state_dict(),
-                os.path.join(save_dir, "model.pt")
-            )
+            torch.save(model_to_save.state_dict(), os.path.join(save_dir, "model.pt"))
         logger.info(f"SFT model saved: {save_dir}")

@@ -9,15 +9,14 @@ Provides ground-truth reward signals for:
 """
 
 import ast
+import contextlib
+import os
 import re
 import subprocess
-import tempfile
-import os
 import sys
-import math
+import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 
 from loguru import logger
 
@@ -40,7 +39,7 @@ class VerifiableTask(ABC):
         pass
 
     @abstractmethod
-    def extract_answer(self, response: str) -> Optional[str]:
+    def extract_answer(self, response: str) -> str | None:
         pass
 
 
@@ -58,7 +57,7 @@ class MathVerifier(VerifiableTask):
         r"=\s*([-+]?\d+\.?\d*)\s*$",
     ]
 
-    def extract_answer(self, response: str) -> Optional[str]:
+    def extract_answer(self, response: str) -> str | None:
         """Extract numeric answer from model response."""
         for pattern in self.ANSWER_PATTERNS:
             match = re.search(pattern, response, re.IGNORECASE)
@@ -69,25 +68,19 @@ class MathVerifier(VerifiableTask):
         numbers = re.findall(r"[-+]?\d+\.?\d*", response)
         return numbers[-1] if numbers else None
 
-    def _parse_number(self, s: str) -> Optional[float]:
+    def _parse_number(self, s: str) -> float | None:
         try:
             return float(s.replace(",", ""))
         except (ValueError, TypeError):
             return None
 
     def compute_reward(
-        self,
-        prompt: str,
-        response: str,
-        ground_truth: str
+        self, prompt: str, response: str, ground_truth: str
     ) -> VerifiableReward:
         predicted = self.extract_answer(response)
         if predicted is None:
             return VerifiableReward(
-                reward=0.0,
-                passed=False,
-                reason="No answer extracted",
-                details={}
+                reward=0.0, passed=False, reason="No answer extracted", details={}
             )
 
         pred_val = self._parse_number(predicted)
@@ -98,7 +91,7 @@ class MathVerifier(VerifiableTask):
                 reward=0.0,
                 passed=False,
                 reason="Failed to parse numbers",
-                details={"predicted": predicted, "truth": ground_truth}
+                details={"predicted": predicted, "truth": ground_truth},
             )
 
         # Exact match with tolerance
@@ -127,10 +120,8 @@ class MathVerifier(VerifiableTask):
             details={
                 "predicted": pred_val,
                 "ground_truth": true_val,
-                "error_ratio": abs(pred_val - true_val) / (
-                    abs(true_val) + 1e-8
-                )
-            }
+                "error_ratio": abs(pred_val - true_val) / (abs(true_val) + 1e-8),
+            },
         )
 
 
@@ -140,15 +131,11 @@ class CodeVerifier(VerifiableTask):
     Executes generated code in sandbox and checks output.
     """
 
-    def __init__(
-        self,
-        timeout: int = 10,
-        max_output_len: int = 1000
-    ):
+    def __init__(self, timeout: int = 10, max_output_len: int = 1000):
         self.timeout = timeout
         self.max_output_len = max_output_len
 
-    def extract_answer(self, response: str) -> Optional[str]:
+    def extract_answer(self, response: str) -> str | None:
         """Extract Python code block from response."""
         patterns = [
             r"```python\n(.*?)```",
@@ -161,13 +148,10 @@ class CodeVerifier(VerifiableTask):
                 return match.group(1).strip()
         return response.strip()
 
-    def _run_code(
-        self, code: str, test_input: str = ""
-    ) -> tuple[bool, str, str]:
+    def _run_code(self, code: str, test_input: str = "") -> tuple[bool, str, str]:
         """Execute code in subprocess sandbox."""
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py",
-            delete=False, encoding="utf-8"
+            mode="w", suffix=".py", delete=False, encoding="utf-8"
         ) as f:
             f.write(code)
             tmpfile = f.name
@@ -180,9 +164,9 @@ class CodeVerifier(VerifiableTask):
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
-                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
             )
-            stdout = result.stdout[:self.max_output_len]
+            stdout = result.stdout[: self.max_output_len]
             stderr = result.stderr[:500]
             return result.returncode == 0, stdout, stderr
 
@@ -191,24 +175,16 @@ class CodeVerifier(VerifiableTask):
         except Exception as e:
             return False, "", str(e)
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 os.unlink(tmpfile)
-            except Exception:
-                pass
 
     def compute_reward(
-        self,
-        prompt: str,
-        response: str,
-        ground_truth: str
+        self, prompt: str, response: str, ground_truth: str
     ) -> VerifiableReward:
         code = self.extract_answer(response)
         if not code:
             return VerifiableReward(
-                reward=-1.0,
-                passed=False,
-                reason="No code extracted",
-                details={}
+                reward=-1.0, passed=False, reason="No code extracted", details={}
             )
 
         # Syntax check
@@ -219,7 +195,7 @@ class CodeVerifier(VerifiableTask):
                 reward=-0.5,
                 passed=False,
                 reason=f"Syntax error: {e}",
-                details={"code": code[:200]}
+                details={"code": code[:200]},
             )
 
         # Execute and check output
@@ -229,7 +205,7 @@ class CodeVerifier(VerifiableTask):
                 reward=-0.3,
                 passed=False,
                 reason=f"Runtime error: {stderr[:100]}",
-                details={"stderr": stderr}
+                details={"stderr": stderr},
             )
 
         # Compare output with expected
@@ -253,10 +229,7 @@ class CodeVerifier(VerifiableTask):
             reward=reward,
             passed=passed,
             reason=reason,
-            details={
-                "actual": actual[:200],
-                "expected": expected[:200]
-            }
+            details={"actual": actual[:200], "expected": expected[:200]},
         )
 
 
@@ -266,14 +239,11 @@ class FormatVerifier(VerifiableTask):
     Checks JSON, XML, specific structure requirements.
     """
 
-    def extract_answer(self, response: str) -> Optional[str]:
+    def extract_answer(self, response: str) -> str | None:
         return response.strip()
 
     def compute_reward(
-        self,
-        prompt: str,
-        response: str,
-        ground_truth: str
+        self, prompt: str, response: str, ground_truth: str
     ) -> VerifiableReward:
         import json
 
@@ -293,8 +263,7 @@ class FormatVerifier(VerifiableTask):
         elif format_type == "bullet_list":
             lines = response.strip().split("\n")
             bullet_lines = [
-                l for l in lines
-                if l.strip().startswith(("-", "•", "*", "·"))
+                line for line in lines if line.strip().startswith(("-", "•", "*", "·"))
             ]
             ratio = len(bullet_lines) / max(len(lines), 1)
             score = min(1.0, ratio * 2)
@@ -314,7 +283,7 @@ class FormatVerifier(VerifiableTask):
             reward=score,
             passed=score >= 0.8,
             reason="; ".join(reasons),
-            details={"format": format_type, "score": score}
+            details={"format": format_type, "score": score},
         )
 
 
@@ -332,17 +301,12 @@ class VerifiableRewardRouter:
         }
 
     def compute_reward(
-        self,
-        prompt: str,
-        response: str,
-        ground_truth: str,
-        task_type: str = "math"
+        self, prompt: str, response: str, ground_truth: str, task_type: str = "math"
     ) -> VerifiableReward:
         verifier = self.verifiers.get(task_type)
         if not verifier:
             logger.warning(f"Unknown task type: {task_type}")
             return VerifiableReward(
-                reward=0.0, passed=False,
-                reason="Unknown task", details={}
+                reward=0.0, passed=False, reason="Unknown task", details={}
             )
         return verifier.compute_reward(prompt, response, ground_truth)

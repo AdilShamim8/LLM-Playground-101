@@ -1,6 +1,5 @@
 """Evaluation panel UI component."""
 
-import json
 
 import gradio as gr
 import requests
@@ -46,15 +45,11 @@ def build_eval_panel(api_base: str) -> None:
                     placeholder="Text to compute perplexity...",
                 )
 
-            run_eval_btn = gr.Button(
-                "▶️ Run Evaluation", variant="primary"
-            )
+            run_eval_btn = gr.Button("▶️ Run Evaluation", variant="primary")
 
         with gr.Column():
             eval_results = gr.JSON(label="Results")
-            eval_status = gr.Textbox(
-                label="Status", interactive=False
-            )
+            eval_status = gr.Textbox(label="Status", interactive=False)
 
     def run_eval(task, texts, hyps, refs, model_name):
         payload = {
@@ -66,18 +61,15 @@ def build_eval_panel(api_base: str) -> None:
         }
 
         try:
-            resp = requests.post(
-                f"{api_base}/evaluate", json=payload, timeout=10
-            )
+            resp = requests.post(f"{api_base}/evaluate", json=payload, timeout=10)
             job = resp.json()
             job_id = job.get("job_id", "")
 
             import time
+
             for _ in range(30):
                 time.sleep(1)
-                poll = requests.get(
-                    f"{api_base}/evaluate/{job_id}", timeout=10
-                )
+                poll = requests.get(f"{api_base}/evaluate/{job_id}", timeout=10)
                 data = poll.json()
                 if data["status"] == "completed":
                     return data.get("results", {}), "✅ Complete"

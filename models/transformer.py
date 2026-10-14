@@ -4,24 +4,22 @@ Implements Pre-LN Transformer (used by GPT-2, LLaMA, etc.)
 with optional Post-LN for BERT-style models.
 """
 
-import math
-from typing import Optional
 
 import torch
 import torch.nn as nn
 
-from models.layers import ModelConfig, build_norm, build_mlp
 from models.attention import KVCache, build_attention
+from models.layers import ModelConfig, build_mlp, build_norm
 
 
 class TransformerBlock(nn.Module):
     """
     Pre-LayerNorm Transformer Block.
-    
+
     Architecture (Pre-LN, more stable training):
         x -> LayerNorm -> Attention -> x + residual
         x -> LayerNorm -> FFN       -> x + residual
-    
+
     Note: Original Transformer used Post-LN.
     Pre-LN is now standard for large LMs.
     """
@@ -46,11 +44,11 @@ class TransformerBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        kv_cache: Optional[KVCache] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        kv_cache: KVCache | None = None,
         output_attentions: bool = False,
-        use_causal_mask: bool = True
+        use_causal_mask: bool = True,
     ) -> tuple:
         # Self-Attention with residual
         residual = hidden_states
@@ -61,7 +59,7 @@ class TransformerBlock(nn.Module):
             position_ids=position_ids,
             kv_cache=kv_cache,
             output_attentions=output_attentions,
-            use_causal_mask=use_causal_mask
+            use_causal_mask=use_causal_mask,
         )
         hidden_states = attn_outputs[0]
         hidden_states = residual + hidden_states
@@ -87,22 +85,21 @@ class TransformerModel(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([
-            TransformerBlock(config, layer_idx=i)
-            for i in range(config.num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [TransformerBlock(config, layer_idx=i) for i in range(config.num_layers)]
+        )
         self.norm = build_norm(config, config.hidden_size)
         self.gradient_checkpointing = False
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        kv_cache: Optional[KVCache] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        kv_cache: KVCache | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        use_causal_mask: bool = True
+        use_causal_mask: bool = True,
     ) -> dict:
         all_hidden_states = [] if output_hidden_states else None
         all_attentions = [] if output_attentions else None
@@ -117,9 +114,9 @@ class TransformerModel(nn.Module):
                     hidden_states,
                     attention_mask,
                     position_ids,
-                    None,   # No KV cache with grad checkpointing
+                    None,  # No KV cache with grad checkpointing
                     output_attentions,
-                    use_causal_mask
+                    use_causal_mask,
                 )
                 layer_outputs = (hidden_states,)
             else:
@@ -129,7 +126,7 @@ class TransformerModel(nn.Module):
                     position_ids=position_ids,
                     kv_cache=kv_cache,
                     output_attentions=output_attentions,
-                    use_causal_mask=use_causal_mask
+                    use_causal_mask=use_causal_mask,
                 )
                 hidden_states = layer_outputs[0]
 
@@ -142,13 +139,15 @@ class TransformerModel(nn.Module):
             all_hidden_states.append(hidden_states)
 
         return {
-            'last_hidden_state': hidden_states,
-            'hidden_states': all_hidden_states,
-            'attentions': all_attentions,
+            "last_hidden_state": hidden_states,
+            "hidden_states": all_hidden_states,
+            "attentions": all_attentions,
         }
 
     def _gradient_checkpoint_layer(self, layer, *args):
         import torch.utils.checkpoint as checkpoint
+
         def custom_forward(*inputs):
             return layer(*inputs)[0]
+
         return checkpoint.checkpoint(custom_forward, *args)

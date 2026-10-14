@@ -3,35 +3,38 @@ QwenModel — full causal LM wrapper.
 Appended to qwen.py.
 """
 
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional
 
-from models.layers import RMSNorm, SwiGLU
-from models.attention import KVCache
+from models.attention import GroupedQueryAttention, KVCache
 from models.gpt import GPTOutput
+from models.layers import ModelConfig, RMSNorm, SwiGLU
+
+# Type alias: QwenConfig is a ModelConfig configured for Qwen.
+# In a full implementation this would add dynamic NTK RoPE and Log-N
+# attention fields, but the base architecture reuses ModelConfig.
+QwenConfig = ModelConfig
+# QwenAttention uses GQA (Grouped Query Attention) as Qwen does.
+QwenAttention = GroupedQueryAttention
 
 
 class QwenBlock(nn.Module):
     """Single Qwen transformer block."""
 
-    def __init__(self, config: "QwenConfig", layer_idx: int):
+    def __init__(self, config: QwenConfig, layer_idx: int):
         super().__init__()
         self.ln_1 = RMSNorm(config.hidden_size, config.layer_norm_eps)
         self.ln_2 = RMSNorm(config.hidden_size, config.layer_norm_eps)
         self.attn = QwenAttention(config, layer_idx)
-        self.mlp = SwiGLU(
-            config.hidden_size, config.intermediate_size
-        )
+        self.mlp = SwiGLU(config.hidden_size, config.intermediate_size)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        kv_cache: Optional[KVCache] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        kv_cache: KVCache | None = None,
         output_attentions: bool = False,
         use_causal_mask: bool = True,
     ) -> tuple:
@@ -65,23 +68,16 @@ class QwenModel(nn.Module):
     SwiGLU FFN, RMSNorm, no bias.
     """
 
-    def __init__(self, config: "QwenConfig"):
+    def __init__(self, config: QwenConfig):
         super().__init__()
         self.config = config
 
-        self.embedding = nn.Embedding(
-            config.vocab_size, config.hidden_size
+        self.embedding = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.layers = nn.ModuleList(
+            [QwenBlock(config, layer_idx=i) for i in range(config.num_layers)]
         )
-        self.layers = nn.ModuleList([
-            QwenBlock(config, layer_idx=i)
-            for i in range(config.num_layers)
-        ])
-        self.norm = RMSNorm(
-            config.hidden_size, config.layer_norm_eps
-        )
-        self.lm_head = nn.Linear(
-            config.hidden_size, config.vocab_size, bias=False
-        )
+        self.norm = RMSNorm(config.hidden_size, config.layer_norm_eps)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         if config.tie_word_embeddings:
             self.lm_head.weight = self.embedding.weight
@@ -101,10 +97,10 @@ class QwenModel(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        kv_cache: Optional[KVCache] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        kv_cache: KVCache | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         use_causal_mask: bool = True,
@@ -157,8 +153,5 @@ class QwenModel(nn.Module):
 
     def num_parameters(self, trainable_only: bool = True) -> int:
         if trainable_only:
-            return sum(
-                p.numel() for p in self.parameters()
-                if p.requires_grad
-            )
+            return sum(p.numel() for p in self.parameters() if p.requires_grad)
         return sum(p.numel() for p in self.parameters())

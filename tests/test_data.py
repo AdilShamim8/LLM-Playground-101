@@ -1,29 +1,24 @@
 """Tests for data pipeline components."""
 
 import json
-import os
-import tempfile
-import pytest
 
-from data.tokenization.bpe_tokenizer import BPEConfig, ByteLevelBPETokenizer
+from data.cleaning.dolma_cleaner import DolmaConfig, GopherQualityFilter, PIIRedactor
+from data.cleaning.fineweb_cleaner import EducationalScorer
 from data.cleaning.quality_filters import (
-    QualityConfig, TextQualityFilter, ContentFilter
+    ContentFilter,
+    QualityConfig,
+    TextQualityFilter,
 )
 from data.cleaning.refined_web import (
-    MinHashDeduplicator, ExactDeduplicator, RefinedWebConfig
+    ExactDeduplicator,
+    MinHashDeduplicator,
 )
-from data.cleaning.dolma_cleaner import (
-    DolmaConfig, GopherQualityFilter, PIIRedactor
-)
-from data.cleaning.fineweb_cleaner import (
-    FineWebConfig, EducationalScorer
-)
-
+from data.tokenization.bpe_tokenizer import BPEConfig, ByteLevelBPETokenizer
 
 # ── Tokenizer Tests ───────────────────────────────────────────────
 
-class TestBPETokenizer:
 
+class TestBPETokenizer:
     def test_byte_encoder_coverage(self):
         config = BPEConfig(vocab_size=300)
         tok = ByteLevelBPETokenizer(config)
@@ -35,11 +30,11 @@ class TestBPETokenizer:
             vocab_size=300,
             min_frequency=1,
             special_tokens={
-                'bos_token': '<|start|>',
-                'eos_token': '<|end|>',
-                'unk_token': '<|unk|>',
-                'pad_token': '<|pad|>',
-            }
+                "bos_token": "<|start|>",
+                "eos_token": "<|end|>",
+                "unk_token": "<|unk|>",
+                "pad_token": "<|pad|>",
+            },
         )
         tok = ByteLevelBPETokenizer(config)
         corpus = [
@@ -56,11 +51,11 @@ class TestBPETokenizer:
             vocab_size=300,
             min_frequency=1,
             special_tokens={
-                'bos_token': '<|start|>',
-                'eos_token': '<|end|>',
-                'unk_token': '<|unk|>',
-                'pad_token': '<|pad|>',
-            }
+                "bos_token": "<|start|>",
+                "eos_token": "<|end|>",
+                "unk_token": "<|unk|>",
+                "pad_token": "<|pad|>",
+            },
         )
         tok = ByteLevelBPETokenizer(config)
         corpus = ["hello world test encode decode"] * 20
@@ -72,32 +67,33 @@ class TestBPETokenizer:
 
     def test_encode_batch(self):
         config = BPEConfig(
-            vocab_size=300, min_frequency=1,
+            vocab_size=300,
+            min_frequency=1,
             special_tokens={
-                'bos_token': '<|s|>', 'eos_token': '<|e|>',
-                'unk_token': '<|u|>', 'pad_token': '<|p|>'
-            }
+                "bos_token": "<|s|>",
+                "eos_token": "<|e|>",
+                "unk_token": "<|u|>",
+                "pad_token": "<|p|>",
+            },
         )
         tok = ByteLevelBPETokenizer(config)
         tok.train(["hello world test"] * 20)
-        result = tok.encode_batch(
-            ["hello", "hello world"],
-            padding=True, max_length=32
-        )
-        assert 'input_ids' in result
-        assert 'attention_mask' in result
-        assert len(result['input_ids']) == 2
-        assert len(result['input_ids'][0]) == len(
-            result['input_ids'][1]
-        )
+        result = tok.encode_batch(["hello", "hello world"], padding=True, max_length=32)
+        assert "input_ids" in result
+        assert "attention_mask" in result
+        assert len(result["input_ids"]) == 2
+        assert len(result["input_ids"][0]) == len(result["input_ids"][1])
 
     def test_save_load(self, tmp_path):
         config = BPEConfig(
-            vocab_size=300, min_frequency=1,
+            vocab_size=300,
+            min_frequency=1,
             special_tokens={
-                'bos_token': '<|s|>', 'eos_token': '<|e|>',
-                'unk_token': '<|u|>', 'pad_token': '<|p|>'
-            }
+                "bos_token": "<|s|>",
+                "eos_token": "<|e|>",
+                "unk_token": "<|u|>",
+                "pad_token": "<|p|>",
+            },
         )
         tok = ByteLevelBPETokenizer(config)
         tok.train(["hello world testing save load"] * 20)
@@ -111,8 +107,8 @@ class TestBPETokenizer:
 
 # ── Quality Filter Tests ──────────────────────────────────────────
 
-class TestQualityFilters:
 
+class TestQualityFilters:
     def test_good_text_passes(self):
         config = QualityConfig()
         filt = TextQualityFilter(config)
@@ -156,13 +152,13 @@ class TestQualityFilters:
 
 # ── Deduplication Tests ───────────────────────────────────────────
 
-class TestDeduplication:
 
+class TestDeduplication:
     def test_exact_dedup(self):
         dedup = ExactDeduplicator()
         text = "This is a unique document for testing."
         assert not dedup.is_duplicate(text)
-        assert dedup.is_duplicate(text)     # Second time = dup
+        assert dedup.is_duplicate(text)  # Second time = dup
         assert len(dedup) == 1
 
     def test_exact_dedup_different(self):
@@ -190,8 +186,8 @@ class TestDeduplication:
 
 # ── Dolma Cleaner Tests ───────────────────────────────────────────
 
-class TestDolmaCleaner:
 
+class TestDolmaCleaner:
     def test_gopher_good_text(self):
         config = DolmaConfig()
         gopher = GopherQualityFilter(config)
@@ -229,11 +225,8 @@ class TestDolmaCleaner:
 
     def test_dolma_pipeline_jsonl(self, tmp_path):
         from data.cleaning.dolma_cleaner import DolmaTextCleaner
-        config = DolmaConfig(
-            min_length=50,
-            min_words=10,
-            output_dir=str(tmp_path)
-        )
+
+        config = DolmaConfig(min_length=50, min_words=10, output_dir=str(tmp_path))
         cleaner = DolmaTextCleaner(config)
 
         # Create test input
@@ -250,24 +243,21 @@ class TestDolmaCleaner:
                 "optimization algorithms used in modern deep learning."
             ),
         }
-        short_doc = {
-            "url": "https://example.com/short",
-            "text": "Too short."
-        }
+        short_doc = {"url": "https://example.com/short", "text": "Too short."}
 
-        with open(input_file, 'w') as f:
-            f.write(json.dumps(good_doc) + '\n')
-            f.write(json.dumps(short_doc) + '\n')
+        with open(input_file, "w") as f:
+            f.write(json.dumps(good_doc) + "\n")
+            f.write(json.dumps(short_doc) + "\n")
 
         stats = cleaner.process_file(input_file, output_file)
-        assert stats['total'] == 2
-        assert stats['passed'] >= 1
+        assert stats["total"] == 2
+        assert stats["passed"] >= 1
 
 
 # ── FineWeb Tests ─────────────────────────────────────────────────
 
-class TestFineWebCleaner:
 
+class TestFineWebCleaner:
     def test_educational_scorer_high(self):
         scorer = EducationalScorer()
         text = (

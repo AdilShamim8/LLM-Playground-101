@@ -5,19 +5,19 @@ Architecture: LM backbone + scalar head.
 Loss: Bradley-Terry preference loss.
 """
 
-import os
 import json
+import os
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
 from loguru import logger
+from torch.utils.data import DataLoader, Dataset
 
 try:
     import wandb
+
     WANDB_AVAILABLE = True
 except ImportError:
     WANDB_AVAILABLE = False
@@ -52,11 +52,11 @@ class RewardModelConfig:
 class RewardModel(nn.Module):
     """
     Reward Model = Pretrained LM + Scalar Head.
-    
+
     Given a (prompt, response) pair, outputs a scalar reward.
     Trained via Bradley-Terry model on preference pairs:
         L = -log(sigmoid(r_chosen - r_rejected))
-    
+
     Higher reward = better response (as judged by humans).
     """
 
@@ -70,7 +70,7 @@ class RewardModel(nn.Module):
             nn.Linear(config.hidden_size, 256),
             nn.GELU(),
             nn.Dropout(0.1),
-            nn.Linear(256, 1)
+            nn.Linear(256, 1),
         )
 
         # Initialize head
@@ -82,12 +82,12 @@ class RewardModel(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Returns scalar reward for each sequence.
         Uses last non-padding token's hidden state.
-        
+
         Returns:
             rewards: (batch_size,) reward scores
         """
@@ -105,10 +105,7 @@ class RewardModel(nn.Module):
             # Find last non-padding position
             seq_lengths = attention_mask.sum(dim=1) - 1
             batch_size = input_ids.shape[0]
-            last_hidden = hidden_states[
-                torch.arange(batch_size),
-                seq_lengths
-            ]
+            last_hidden = hidden_states[torch.arange(batch_size), seq_lengths]
         else:
             last_hidden = hidden_states[:, -1, :]
 
@@ -120,8 +117,8 @@ class RewardModel(nn.Module):
         self,
         chosen_ids: torch.Tensor,
         rejected_ids: torch.Tensor,
-        chosen_mask: Optional[torch.Tensor] = None,
-        rejected_mask: Optional[torch.Tensor] = None,
+        chosen_mask: torch.Tensor | None = None,
+        rejected_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, dict]:
         """
         Bradley-Terry preference loss:
@@ -158,27 +155,19 @@ class PreferenceDataset(Dataset):
     """
 
     def __init__(
-        self,
-        data_path: str,
-        tokenizer,
-        max_length: int = 1024,
-        split: str = "train"
+        self, data_path: str, tokenizer, max_length: int = 1024, split: str = "train"
     ):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.examples = self._load(data_path, split)
-        logger.info(
-            f"Preference Dataset [{split}]: {len(self.examples)}"
-        )
+        logger.info(f"Preference Dataset [{split}]: {len(self.examples)}")
 
     def _load(self, data_path: str, split: str) -> list[dict]:
         filepath = os.path.join(data_path, f"{split}.jsonl")
         examples = []
 
         if not os.path.exists(filepath):
-            logger.warning(
-                f"No preference data at {filepath}. Demo mode."
-            )
+            logger.warning(f"No preference data at {filepath}. Demo mode.")
             return self._demo_data()
 
         with open(filepath, encoding="utf-8") as f:
@@ -195,7 +184,7 @@ class PreferenceDataset(Dataset):
             {
                 "prompt": "What is 2+2?",
                 "chosen": "2+2 equals 4.",
-                "rejected": "I don't know math."
+                "rejected": "I don't know math.",
             },
             {
                 "prompt": "Explain gravity.",
@@ -203,18 +192,14 @@ class PreferenceDataset(Dataset):
                     "Gravity is a fundamental force that attracts "
                     "objects with mass toward each other."
                 ),
-                "rejected": "Things fall down because of magic."
+                "rejected": "Things fall down because of magic.",
             },
         ]
 
-    def _encode_pair(
-        self, prompt: str, response: str
-    ) -> tuple[list[int], list[int]]:
+    def _encode_pair(self, prompt: str, response: str) -> tuple[list[int], list[int]]:
         """Encode prompt + response into token ids."""
         text = f"Human: {prompt}\nAssistant: {response}"
-        ids = self.tokenizer.encode(
-            text, add_special_tokens=True
-        )[:self.max_length]
+        ids = self.tokenizer.encode(text, add_special_tokens=True)[: self.max_length]
         mask = [1] * len(ids)
 
         # Pad
@@ -222,7 +207,7 @@ class PreferenceDataset(Dataset):
         ids = ids + [0] * pad_len
         mask = mask + [0] * pad_len
 
-        return ids[:self.max_length], mask[:self.max_length]
+        return ids[: self.max_length], mask[: self.max_length]
 
     def __len__(self) -> int:
         return len(self.examples)
@@ -234,68 +219,47 @@ class PreferenceDataset(Dataset):
         rejected = item.get("rejected", "")
 
         chosen_ids, chosen_mask = self._encode_pair(prompt, chosen)
-        rejected_ids, rejected_mask = self._encode_pair(
-            prompt, rejected
-        )
+        rejected_ids, rejected_mask = self._encode_pair(prompt, rejected)
 
         return {
-            "chosen_input_ids": torch.tensor(
-                chosen_ids, dtype=torch.long
-            ),
-            "chosen_attention_mask": torch.tensor(
-                chosen_mask, dtype=torch.long
-            ),
-            "rejected_input_ids": torch.tensor(
-                rejected_ids, dtype=torch.long
-            ),
-            "rejected_attention_mask": torch.tensor(
-                rejected_mask, dtype=torch.long
-            ),
+            "chosen_input_ids": torch.tensor(chosen_ids, dtype=torch.long),
+            "chosen_attention_mask": torch.tensor(chosen_mask, dtype=torch.long),
+            "rejected_input_ids": torch.tensor(rejected_ids, dtype=torch.long),
+            "rejected_attention_mask": torch.tensor(rejected_mask, dtype=torch.long),
         }
 
 
 class RewardModelTrainer:
     """Train the reward model on preference pairs."""
 
-    def __init__(
-        self,
-        reward_model: RewardModel,
-        config: RewardModelConfig
-    ):
+    def __init__(self, reward_model: RewardModel, config: RewardModelConfig):
         self.model = reward_model
         self.config = config
         self.device = (
-            torch.device("cuda")
-            if torch.cuda.is_available()
-            else torch.device("cpu")
+            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
         self.model = self.model.to(self.device)
         os.makedirs(config.output_dir, exist_ok=True)
 
         if WANDB_AVAILABLE:
             wandb.init(
-                project=config.wandb_project,
-                name="reward_model",
-                config=vars(config)
+                project=config.wandb_project, name="reward_model", config=vars(config)
             )
 
     def train(
         self,
         train_dataset: PreferenceDataset,
-        val_dataset: Optional[PreferenceDataset] = None
+        val_dataset: PreferenceDataset | None = None,
     ):
         config = self.config
         loader = DataLoader(
-            train_dataset,
-            batch_size=config.batch_size,
-            shuffle=True,
-            num_workers=4
+            train_dataset, batch_size=config.batch_size, shuffle=True, num_workers=4
         )
 
         optimizer = torch.optim.AdamW(
             self.model.parameters(),
             lr=config.learning_rate,
-            weight_decay=config.weight_decay
+            weight_decay=config.weight_decay,
         )
 
         total_steps = len(loader) * config.num_epochs
@@ -307,9 +271,7 @@ class RewardModelTrainer:
         best_val_acc = 0.0
 
         autocast_ctx = torch.autocast(
-            device_type="cuda",
-            dtype=torch.bfloat16,
-            enabled=torch.cuda.is_available()
+            device_type="cuda", dtype=torch.bfloat16, enabled=torch.cuda.is_available()
         )
 
         for epoch in range(config.num_epochs):
@@ -317,26 +279,17 @@ class RewardModelTrainer:
 
             for batch in loader:
                 chosen_ids = batch["chosen_input_ids"].to(self.device)
-                chosen_mask = batch["chosen_attention_mask"].to(
-                    self.device
-                )
-                rejected_ids = batch["rejected_input_ids"].to(
-                    self.device
-                )
-                rejected_mask = batch["rejected_attention_mask"].to(
-                    self.device
-                )
+                chosen_mask = batch["chosen_attention_mask"].to(self.device)
+                rejected_ids = batch["rejected_input_ids"].to(self.device)
+                rejected_mask = batch["rejected_attention_mask"].to(self.device)
 
                 with autocast_ctx:
                     loss, metrics = self.model.compute_preference_loss(
-                        chosen_ids, rejected_ids,
-                        chosen_mask, rejected_mask
+                        chosen_ids, rejected_ids, chosen_mask, rejected_mask
                     )
 
                 loss.backward()
-                nn.utils.clip_grad_norm_(
-                    self.model.parameters(), config.max_grad_norm
-                )
+                nn.utils.clip_grad_norm_(self.model.parameters(), config.max_grad_norm)
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
@@ -350,15 +303,12 @@ class RewardModelTrainer:
                         f"Margin: {metrics['reward_margin']:.4f}"
                     )
                     if WANDB_AVAILABLE:
-                        wandb.log(
-                            {f"rm/{k}": v for k, v in metrics.items()}
-                        )
+                        wandb.log({f"rm/{k}": v for k, v in metrics.items()})
 
             if val_dataset:
                 val_metrics = self._evaluate(val_dataset)
                 logger.info(
-                    f"Epoch {epoch+1} Val | "
-                    f"Acc: {val_metrics['accuracy']:.3f}"
+                    f"Epoch {epoch+1} Val | " f"Acc: {val_metrics['accuracy']:.3f}"
                 )
                 if val_metrics["accuracy"] > best_val_acc:
                     best_val_acc = val_metrics["accuracy"]
@@ -369,9 +319,7 @@ class RewardModelTrainer:
             wandb.finish()
 
     def _evaluate(self, val_dataset: PreferenceDataset) -> dict:
-        loader = DataLoader(
-            val_dataset, batch_size=self.config.batch_size
-        )
+        loader = DataLoader(val_dataset, batch_size=self.config.batch_size)
         self.model.eval()
         all_metrics = []
 
@@ -388,15 +336,11 @@ class RewardModelTrainer:
 
         self.model.train()
         return {
-            k: sum(m[k] for m in all_metrics) / len(all_metrics)
-            for k in all_metrics[0]
+            k: sum(m[k] for m in all_metrics) / len(all_metrics) for k in all_metrics[0]
         }
 
     def _save(self, tag: str):
         path = os.path.join(self.config.output_dir, tag)
         os.makedirs(path, exist_ok=True)
-        torch.save(
-            self.model.state_dict(),
-            os.path.join(path, "reward_model.pt")
-        )
+        torch.save(self.model.state_dict(), os.path.join(path, "reward_model.pt"))
         logger.info(f"Reward model saved: {path}")

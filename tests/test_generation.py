@@ -4,17 +4,17 @@ import pytest
 import torch
 
 from generation.strategies import (
+    BeamSearchDecoder,
     GenerationConfig,
     GreedyDecoder,
+    RepetitionPenalty,
     SamplingDecoder,
-    BeamSearchDecoder,
+    TemperatureScaling,
     top_k_filtering,
     top_p_filtering,
-    TemperatureScaling,
-    RepetitionPenalty,
 )
-from models.layers import ModelConfig
 from models.gpt import GPTModel
+from models.layers import ModelConfig
 
 
 @pytest.fixture

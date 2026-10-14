@@ -1,22 +1,22 @@
 """Evaluation package."""
 
-from evaluation.metrics import (
-    PerplexityMetric,
-    BLEUScore,
-    ROUGEScore,
-    EvaluationSuite,
-)
 from evaluation.benchmarks import (
-    MultipleChoiceBenchmark,
-    MMLUBenchmark,
-    GSM8KBenchmark,
     BenchmarkResult,
+    GSM8KBenchmark,
+    MMLUBenchmark,
+    MultipleChoiceBenchmark,
 )
 from evaluation.human_eval import (
-    HumanEvalCollector,
-    ELORatingSystem,
     ComparisonResult,
+    ELORatingSystem,
+    HumanEvalCollector,
     ModelRating,
+)
+from evaluation.metrics import (
+    BLEUScore,
+    EvaluationSuite,
+    PerplexityMetric,
+    ROUGEScore,
 )
 
 __all__ = [

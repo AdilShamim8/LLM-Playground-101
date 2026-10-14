@@ -35,9 +35,7 @@ def build_model_panel(api_base: str) -> None:
                 label="Dtype",
             )
             load_btn = gr.Button("⬆️ Load Model", variant="primary")
-            load_status = gr.Textbox(
-                label="Load Status", interactive=False
-            )
+            load_status = gr.Textbox(label="Load Status", interactive=False)
 
         with gr.Column():
             gr.Markdown("#### Loaded Models")
@@ -45,7 +43,8 @@ def build_model_panel(api_base: str) -> None:
             models_list = gr.JSON(label="Models")
 
             gr.Markdown("#### Architecture Info")
-            gr.Markdown("""
+            gr.Markdown(
+                """
 **Supported Architectures:**
 | Family | Key Features |
 |--------|-------------|
@@ -54,7 +53,8 @@ def build_model_panel(api_base: str) -> None:
 | DeepSeek | MLA, MoE, GQA, RoPE |
 | Qwen | Dynamic NTK, LogN-attn |
 | Gemma | Softcap, Emb-scale, GeGLU |
-            """)
+            """
+            )
 
     def load_model_api(name, path, tok_path, device, dtype):
         payload = {
@@ -91,8 +91,13 @@ def build_model_panel(api_base: str) -> None:
 
     load_btn.click(
         load_model_api,
-        [load_model_name, load_model_path, load_tokenizer_path,
-         load_device, load_dtype],
+        [
+            load_model_name,
+            load_model_path,
+            load_tokenizer_path,
+            load_device,
+            load_dtype,
+        ],
         load_status,
     )
 

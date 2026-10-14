@@ -6,8 +6,6 @@ Multi-Head Attention implementations:
 - KV-Cache for efficient inference
 """
 
-import math
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -27,10 +25,7 @@ class KVCache:
         self.value_cache: list[torch.Tensor] = []
 
     def update(
-        self,
-        layer_idx: int,
-        key: torch.Tensor,
-        value: torch.Tensor
+        self, layer_idx: int, key: torch.Tensor, value: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if layer_idx >= len(self.key_cache):
             self.key_cache.append(key)
@@ -42,10 +37,7 @@ class KVCache:
             self.value_cache[layer_idx] = torch.cat(
                 [self.value_cache[layer_idx], value], dim=2
             )
-        return (
-            self.key_cache[layer_idx],
-            self.value_cache[layer_idx]
-        )
+        return (self.key_cache[layer_idx], self.value_cache[layer_idx])
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         if layer_idx < len(self.key_cache):
@@ -57,26 +49,19 @@ class KVCache:
         self.value_cache.clear()
 
 
-def causal_mask(
-    seq_len: int,
-    device: torch.device,
-    dtype: torch.dtype
-) -> torch.Tensor:
+def causal_mask(seq_len: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
     """
     Create causal (lower-triangular) attention mask.
     Returns additive mask with -inf for masked positions.
     """
-    mask = torch.full(
-        (seq_len, seq_len), float('-inf'),
-        device=device, dtype=dtype
-    )
+    mask = torch.full((seq_len, seq_len), float("-inf"), device=device, dtype=dtype)
     return torch.triu(mask, diagonal=1)
 
 
 class MultiHeadAttention(nn.Module):
     """
     Standard Multi-Head Self-Attention (GPT-2 / BERT style).
-    
+
     Supports:
     - Causal masking for decoder
     - Flash Attention (if available)
@@ -91,7 +76,7 @@ class MultiHeadAttention(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = config.hidden_size // config.num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
 
         assert config.hidden_size % config.num_heads == 0, (
             f"hidden_size {config.hidden_size} must be "
@@ -100,15 +85,9 @@ class MultiHeadAttention(nn.Module):
 
         # Fused QKV projection (more efficient)
         self.qkv_proj = nn.Linear(
-            config.hidden_size,
-            3 * config.hidden_size,
-            bias=False
+            config.hidden_size, 3 * config.hidden_size, bias=False
         )
-        self.out_proj = nn.Linear(
-            config.hidden_size,
-            config.hidden_size,
-            bias=False
-        )
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.attn_dropout = nn.Dropout(config.attention_dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
 
@@ -120,19 +99,18 @@ class MultiHeadAttention(nn.Module):
             self.rotary_emb = RotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=config.max_position_embeddings,
-                theta=config.rope_theta
+                theta=config.rope_theta,
             )
 
     def _check_flash_attn(self) -> bool:
         try:
-            from flash_attn import flash_attn_func
+            import flash_attn  # noqa: F401 — imported for availability check
+
             return True
         except ImportError:
             return False
 
-    def _split_heads(
-        self, x: torch.Tensor, num_heads: int
-    ) -> torch.Tensor:
+    def _split_heads(self, x: torch.Tensor, num_heads: int) -> torch.Tensor:
         """(B, S, H) -> (B, num_heads, S, head_dim)"""
         B, S, _ = x.shape
         x = x.view(B, S, num_heads, self.head_dim)
@@ -145,22 +123,21 @@ class MultiHeadAttention(nn.Module):
         return x.view(B, S, self.hidden_size)
 
     def _flash_attention(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        v: torch.Tensor,
-        causal: bool = True
+        self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True
     ) -> torch.Tensor:
         from flash_attn import flash_attn_func
+
         # Flash Attention expects (B, S, H, D)
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
         out = flash_attn_func(
-            q, k, v,
+            q,
+            k,
+            v,
             dropout_p=self.config.attention_dropout if self.training else 0.0,
             causal=causal,
-            softmax_scale=self.scale
+            softmax_scale=self.scale,
         )
         return out.transpose(1, 2)
 
@@ -169,8 +146,8 @@ class MultiHeadAttention(nn.Module):
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal: bool = True
+        attention_mask: torch.Tensor | None = None,
+        causal: bool = True,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Scaled dot-product attention
         # q, k, v: (B, num_heads, S, head_dim)
@@ -179,19 +156,13 @@ class MultiHeadAttention(nn.Module):
 
         if causal:
             seq_len = q.shape[-2]
-            mask = causal_mask(
-                seq_len,
-                device=q.device,
-                dtype=q.dtype
-            )
+            mask = causal_mask(seq_len, device=q.device, dtype=q.dtype)
             attn_weights = attn_weights + mask
 
         if attention_mask is not None:
             attn_weights = attn_weights + attention_mask
 
-        attn_weights = F.softmax(
-            attn_weights, dim=-1, dtype=torch.float32
-        ).to(q.dtype)
+        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
         out = torch.matmul(attn_weights, v)
@@ -200,11 +171,11 @@ class MultiHeadAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        kv_cache: Optional[KVCache] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        kv_cache: KVCache | None = None,
         output_attentions: bool = False,
-        use_causal_mask: bool = True
+        use_causal_mask: bool = True,
     ) -> tuple:
         B, S, _ = hidden_states.shape
 
@@ -227,9 +198,7 @@ class MultiHeadAttention(nn.Module):
 
         # Attention
         if self.use_flash and not output_attentions:
-            attn_out = self._flash_attention(
-                q, k, v, causal=use_causal_mask
-            )
+            attn_out = self._flash_attention(q, k, v, causal=use_causal_mask)
             attn_weights = None
         else:
             attn_out, attn_weights = self._standard_attention(
@@ -250,15 +219,15 @@ class MultiHeadAttention(nn.Module):
 class GroupedQueryAttention(nn.Module):
     """
     Grouped Query Attention (GQA).
-    
+
     Key insight: num_kv_heads < num_heads.
     Multiple query heads share one K/V head.
     Reduces memory bandwidth for K/V cache by num_heads/num_kv_heads.
-    
+
     Special cases:
     - GQA with num_kv_heads=1: Multi-Query Attention (MQA)
     - GQA with num_kv_heads=num_heads: Standard MHA
-    
+
     Used in: LLaMA-2 (70B), Mistral, Qwen, DeepSeek.
     """
 
@@ -270,33 +239,23 @@ class GroupedQueryAttention(nn.Module):
         self.num_heads = config.num_heads
         self.num_kv_heads = config.num_kv_heads
         self.head_dim = config.hidden_size // config.num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.groups = config.num_heads // config.num_kv_heads
 
-        assert config.num_heads % config.num_kv_heads == 0, (
-            "num_heads must be divisible by num_kv_heads"
-        )
+        assert (
+            config.num_heads % config.num_kv_heads == 0
+        ), "num_heads must be divisible by num_kv_heads"
 
         self.q_proj = nn.Linear(
-            config.hidden_size,
-            config.num_heads * self.head_dim,
-            bias=False
+            config.hidden_size, config.num_heads * self.head_dim, bias=False
         )
         self.k_proj = nn.Linear(
-            config.hidden_size,
-            config.num_kv_heads * self.head_dim,
-            bias=False
+            config.hidden_size, config.num_kv_heads * self.head_dim, bias=False
         )
         self.v_proj = nn.Linear(
-            config.hidden_size,
-            config.num_kv_heads * self.head_dim,
-            bias=False
+            config.hidden_size, config.num_kv_heads * self.head_dim, bias=False
         )
-        self.out_proj = nn.Linear(
-            config.hidden_size,
-            config.hidden_size,
-            bias=False
-        )
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.attn_dropout = nn.Dropout(config.attention_dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
 
@@ -304,7 +263,7 @@ class GroupedQueryAttention(nn.Module):
             self.rotary_emb = RotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=config.max_position_embeddings,
-                theta=config.rope_theta
+                theta=config.rope_theta,
             )
 
     def _repeat_kv(self, x: torch.Tensor) -> torch.Tensor:
@@ -321,11 +280,11 @@ class GroupedQueryAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        kv_cache: Optional[KVCache] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        kv_cache: KVCache | None = None,
         output_attentions: bool = False,
-        use_causal_mask: bool = True
+        use_causal_mask: bool = True,
     ) -> tuple:
         B, S, _ = hidden_states.shape
 
@@ -357,9 +316,7 @@ class GroupedQueryAttention(nn.Module):
         if attention_mask is not None:
             attn_weights = attn_weights + attention_mask
 
-        attn_weights = F.softmax(
-            attn_weights, dim=-1, dtype=torch.float32
-        ).to(q.dtype)
+        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
         out = torch.matmul(attn_weights, v)
@@ -373,9 +330,7 @@ class GroupedQueryAttention(nn.Module):
         return outputs
 
 
-def build_attention(
-    config: ModelConfig, layer_idx: int
-) -> nn.Module:
+def build_attention(config: ModelConfig, layer_idx: int) -> nn.Module:
     """Attention factory: MHA or GQA."""
     if config.use_gqa:
         return GroupedQueryAttention(config, layer_idx)

@@ -49,10 +49,7 @@ def build_chat_panel(
         with gr.Row():
             clear_btn = gr.Button("🗑️ Clear Chat", scale=1)
             system_prompt_box = gr.Textbox(
-                value=(
-                    "You are a helpful, harmless, "
-                    "and honest AI assistant."
-                ),
+                value=("You are a helpful, harmless, " "and honest AI assistant."),
                 label="System Prompt",
                 lines=2,
                 scale=3,

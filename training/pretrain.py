@@ -10,16 +10,13 @@ Production features:
 - Distributed training (DDP)
 """
 
-import os
 import math
+import os
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset, DistributedSampler
-from torch.nn.parallel import DistributedDataParallel as DDP
 from loguru import logger
 
 # NOTE: 'from torch.cuda.amp import GradScaler, autocast' is DEPRECATED
@@ -28,16 +25,19 @@ from loguru import logger
 #   from torch.amp import GradScaler, autocast
 # GradScaler takes a device string: GradScaler('cuda')
 # autocast takes a device_type kwarg: autocast(device_type='cuda')
-from torch.amp import GradScaler, autocast
+from torch.amp import GradScaler
+from torch.utils.data import DataLoader, Dataset
 
 try:
     import wandb
+
     WANDB_AVAILABLE = True
 except ImportError:
     WANDB_AVAILABLE = False
 
 try:
-    import deepspeed
+    import deepspeed  # noqa: F401 — imported for availability check
+
     DEEPSPEED_AVAILABLE = True
 except ImportError:
     DEEPSPEED_AVAILABLE = False
@@ -92,29 +92,21 @@ class PretrainDataset(Dataset):
     Concatenates all documents and chunks into fixed-length sequences.
     """
 
-    def __init__(
-        self,
-        data_path: str,
-        seq_length: int,
-        split: str = 'train'
-    ):
+    def __init__(self, data_path: str, seq_length: int, split: str = "train"):
         self.seq_length = seq_length
         self.data_path = data_path
         self.tokens = self._load_tokens(data_path, split)
-        self.n_sequences = (
-            (len(self.tokens) - 1) // seq_length
-        )
+        self.n_sequences = (len(self.tokens) - 1) // seq_length
         logger.info(
             f"Dataset: {len(self.tokens)} tokens, "
             f"{self.n_sequences} sequences of length {seq_length}"
         )
 
-    def _load_tokens(
-        self, data_path: str, split: str
-    ) -> torch.Tensor:
+    def _load_tokens(self, data_path: str, split: str) -> torch.Tensor:
         """Load pre-tokenized data from binary files."""
-        import numpy as np
         import glob
+
+        import numpy as np
 
         all_tokens = []
         pattern = os.path.join(data_path, f"{split}_*.bin")
@@ -131,9 +123,7 @@ class PretrainDataset(Dataset):
         for fpath in files:
             arr = np.fromfile(fpath, dtype=np.uint16)
             all_tokens.append(torch.from_numpy(arr.astype(np.int32)))
-            logger.info(
-                f"Loaded {fpath}: {len(arr)} tokens"
-            )
+            logger.info(f"Loaded {fpath}: {len(arr)} tokens")
 
         return torch.cat(all_tokens)
 
@@ -149,8 +139,8 @@ class PretrainDataset(Dataset):
         labels = chunk[1:].long()
 
         return {
-            'input_ids': input_ids,
-            'labels': labels,
+            "input_ids": input_ids,
+            "labels": labels,
         }
 
 
@@ -166,7 +156,7 @@ class CosineSchedulerWithWarmup:
         warmup_steps: int,
         max_steps: int,
         min_lr: float,
-        max_lr: float
+        max_lr: float,
     ):
         self.optimizer = optimizer
         self.warmup_steps = warmup_steps
@@ -190,13 +180,13 @@ class CosineSchedulerWithWarmup:
         self._step += 1
         lr = self.get_lr()
         for group in self.optimizer.param_groups:
-            group['lr'] = lr
+            group["lr"] = lr
 
     def state_dict(self) -> dict:
-        return {'step': self._step}
+        return {"step": self._step}
 
     def load_state_dict(self, state: dict):
-        self._step = state['step']
+        self._step = state["step"]
 
 
 class PretrainTrainer:
@@ -204,15 +194,11 @@ class PretrainTrainer:
     Full pre-training trainer with production features.
     """
 
-    def __init__(
-        self,
-        model: nn.Module,
-        config: PretrainConfig
-    ):
+    def __init__(self, model: nn.Module, config: PretrainConfig):
         self.model = model
         self.config = config
         self.global_step = 0
-        self.best_val_loss = float('inf')
+        self.best_val_loss = float("inf")
 
         os.makedirs(config.output_dir, exist_ok=True)
         self._setup_device()
@@ -222,13 +208,11 @@ class PretrainTrainer:
         if torch.cuda.is_available():
             if self.config.local_rank >= 0:
                 torch.cuda.set_device(self.config.local_rank)
-                self.device = torch.device(
-                    f'cuda:{self.config.local_rank}'
-                )
+                self.device = torch.device(f"cuda:{self.config.local_rank}")
             else:
-                self.device = torch.device('cuda')
+                self.device = torch.device("cuda")
         else:
-            self.device = torch.device('cpu')
+            self.device = torch.device("cpu")
 
         logger.info(f"Training on: {self.device}")
 
@@ -237,13 +221,10 @@ class PretrainTrainer:
             wandb.init(
                 project=self.config.wandb_project,
                 name=self.config.wandb_run_name,
-                config=vars(self.config)
+                config=vars(self.config),
             )
 
-    def _build_optimizer(
-        self,
-        model: nn.Module
-    ) -> torch.optim.AdamW:
+    def _build_optimizer(self, model: nn.Module) -> torch.optim.AdamW:
         """
         Build AdamW with weight decay applied only to
         non-bias/non-norm parameters (following GPT-2).
@@ -256,30 +237,24 @@ class PretrainTrainer:
                 continue
             if (
                 param.ndim < 2
-                or 'bias' in name
-                or 'norm' in name
-                or 'embedding' in name
+                or "bias" in name
+                or "norm" in name
+                or "embedding" in name
             ):
                 no_decay_params.append(param)
             else:
                 decay_params.append(param)
 
         param_groups = [
-            {
-                'params': decay_params,
-                'weight_decay': self.config.weight_decay
-            },
-            {
-                'params': no_decay_params,
-                'weight_decay': 0.0
-            }
+            {"params": decay_params, "weight_decay": self.config.weight_decay},
+            {"params": no_decay_params, "weight_decay": 0.0},
         ]
 
         optimizer = torch.optim.AdamW(
             param_groups,
             lr=self.config.learning_rate,
             betas=(self.config.adam_beta1, self.config.adam_beta2),
-            eps=self.config.adam_eps
+            eps=self.config.adam_eps,
         )
         logger.info(
             f"Optimizer: AdamW | "
@@ -290,53 +265,44 @@ class PretrainTrainer:
 
     def _get_autocast_ctx(self):
         if self.config.bf16:
-            return torch.autocast(
-                device_type='cuda', dtype=torch.bfloat16
-            )
+            return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
         if self.config.fp16:
-            return torch.autocast(
-                device_type='cuda', dtype=torch.float16
-            )
-        return torch.autocast(device_type='cuda', enabled=False)
+            return torch.autocast(device_type="cuda", dtype=torch.float16)
+        return torch.autocast(device_type="cuda", enabled=False)
 
-    def _save_checkpoint(
-        self,
-        step: int,
-        val_loss: Optional[float] = None
-    ):
-        checkpoint_dir = os.path.join(
-            self.config.output_dir, f"checkpoint-{step}"
-        )
+    def _save_checkpoint(self, step: int, val_loss: float | None = None):
+        checkpoint_dir = os.path.join(self.config.output_dir, f"checkpoint-{step}")
         os.makedirs(checkpoint_dir, exist_ok=True)
 
         model_to_save = (
-            self.model.module
-            if hasattr(self.model, 'module')
-            else self.model
+            self.model.module if hasattr(self.model, "module") else self.model
         )
         model_to_save.save_pretrained(checkpoint_dir)
 
-        torch.save({
-            'step': step,
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'scheduler_state_dict': self.scheduler.state_dict(),
-            'val_loss': val_loss,
-            'config': vars(self.config),
-        }, os.path.join(checkpoint_dir, 'trainer_state.pt'))
+        torch.save(
+            {
+                "step": step,
+                "optimizer_state_dict": self.optimizer.state_dict(),
+                "scheduler_state_dict": self.scheduler.state_dict(),
+                "val_loss": val_loss,
+                "config": vars(self.config),
+            },
+            os.path.join(checkpoint_dir, "trainer_state.pt"),
+        )
 
         logger.info(f"Checkpoint saved: {checkpoint_dir}")
         self._cleanup_old_checkpoints()
 
     def _cleanup_old_checkpoints(self):
         import glob
+
         checkpoints = sorted(
-            glob.glob(
-                os.path.join(self.config.output_dir, 'checkpoint-*')
-            ),
-            key=lambda x: int(x.split('-')[-1])
+            glob.glob(os.path.join(self.config.output_dir, "checkpoint-*")),
+            key=lambda x: int(x.split("-")[-1]),
         )
         while len(checkpoints) > self.config.keep_last_n_checkpoints:
             import shutil
+
             old_ckpt = checkpoints.pop(0)
             shutil.rmtree(old_ckpt)
             logger.info(f"Deleted old checkpoint: {old_ckpt}")
@@ -348,14 +314,11 @@ class PretrainTrainer:
 
         with torch.no_grad():
             for batch in val_loader:
-                input_ids = batch['input_ids'].to(self.device)
-                labels = batch['labels'].to(self.device)
+                input_ids = batch["input_ids"].to(self.device)
+                labels = batch["labels"].to(self.device)
 
                 with self._get_autocast_ctx():
-                    outputs = self.model(
-                        input_ids=input_ids,
-                        labels=labels
-                    )
+                    outputs = self.model(input_ids=input_ids, labels=labels)
 
                 total_loss += outputs.loss.item()
                 steps += 1
@@ -365,11 +328,7 @@ class PretrainTrainer:
         self.model.train()
         return total_loss / max(steps, 1)
 
-    def train(
-        self,
-        train_dataset: Dataset,
-        val_dataset: Optional[Dataset] = None
-    ):
+    def train(self, train_dataset: Dataset, val_dataset: Dataset | None = None):
         config = self.config
         self.model = self.model.to(self.device)
 
@@ -380,15 +339,12 @@ class PretrainTrainer:
             warmup_steps=config.warmup_steps,
             max_steps=config.max_steps,
             min_lr=config.min_lr,
-            max_lr=config.learning_rate
+            max_lr=config.learning_rate,
         )
 
         # Gradient scaler for fp16 (prevents underflow in fp16 training)
         # Modern API: GradScaler('cuda') instead of GradScaler()
-        self.scaler = GradScaler(
-            'cuda',
-            enabled=config.fp16
-        )
+        self.scaler = GradScaler("cuda", enabled=config.fp16)
 
         # DataLoaders
         train_loader = DataLoader(
@@ -397,7 +353,7 @@ class PretrainTrainer:
             shuffle=True,
             num_workers=4,
             pin_memory=True,
-            drop_last=True
+            drop_last=True,
         )
         val_loader = None
         if val_dataset:
@@ -406,19 +362,16 @@ class PretrainTrainer:
                 batch_size=config.batch_size,
                 shuffle=False,
                 num_workers=2,
-                pin_memory=True
+                pin_memory=True,
             )
 
         # Enable gradient checkpointing
-        if hasattr(self.model, 'enable_gradient_checkpointing'):
+        if hasattr(self.model, "enable_gradient_checkpointing"):
             self.model.enable_gradient_checkpointing()
 
-        total_params = sum(
-            p.numel() for p in self.model.parameters()
-        )
+        total_params = sum(p.numel() for p in self.model.parameters())
         trainable_params = sum(
-            p.numel() for p in self.model.parameters()
-            if p.requires_grad
+            p.numel() for p in self.model.parameters() if p.requires_grad
         )
         logger.info(
             f"Model: {total_params/1e6:.1f}M total params, "
@@ -440,14 +393,11 @@ class PretrainTrainer:
                 if step >= config.max_steps:
                     break
 
-                input_ids = batch['input_ids'].to(self.device)
-                labels = batch['labels'].to(self.device)
+                input_ids = batch["input_ids"].to(self.device)
+                labels = batch["labels"].to(self.device)
 
                 with self._get_autocast_ctx():
-                    outputs = self.model(
-                        input_ids=input_ids,
-                        labels=labels
-                    )
+                    outputs = self.model(input_ids=input_ids, labels=labels)
                     loss = outputs.loss
                     loss = loss / config.gradient_accumulation_steps
 
@@ -464,8 +414,7 @@ class PretrainTrainer:
                         self.scaler.unscale_(self.optimizer)
 
                     grad_norm = nn.utils.clip_grad_norm_(
-                        self.model.parameters(),
-                        config.max_grad_norm
+                        self.model.parameters(), config.max_grad_norm
                     )
 
                     if config.fp16:
@@ -478,9 +427,7 @@ class PretrainTrainer:
                     self.optimizer.zero_grad()
 
                     self.global_step += 1
-                    actual_loss = (
-                        accum_loss * config.gradient_accumulation_steps
-                    )
+                    actual_loss = accum_loss * config.gradient_accumulation_steps
                     accum_loss = 0.0
 
                     # Logging
@@ -495,14 +442,12 @@ class PretrainTrainer:
                         lr = self.scheduler.get_lr()
 
                         log_dict = {
-                            'train/loss': actual_loss,
-                            'train/perplexity': math.exp(
-                                min(actual_loss, 20)
-                            ),
-                            'train/lr': lr,
-                            'train/grad_norm': grad_norm.item(),
-                            'train/tokens_per_sec': tokens_per_sec,
-                            'train/step': self.global_step,
+                            "train/loss": actual_loss,
+                            "train/perplexity": math.exp(min(actual_loss, 20)),
+                            "train/lr": lr,
+                            "train/grad_norm": grad_norm.item(),
+                            "train/tokens_per_sec": tokens_per_sec,
+                            "train/step": self.global_step,
                         }
                         logger.info(
                             f"Step {self.global_step}/{config.max_steps} | "
@@ -518,28 +463,20 @@ class PretrainTrainer:
                         t0 = time.time()
 
                     # Evaluation
-                    if (
-                        val_loader
-                        and self.global_step % config.eval_steps == 0
-                    ):
+                    if val_loader and self.global_step % config.eval_steps == 0:
                         val_loss = self._eval_step(val_loader)
                         logger.info(
-                            f"Step {self.global_step} | "
-                            f"Val Loss: {val_loss:.4f}"
+                            f"Step {self.global_step} | " f"Val Loss: {val_loss:.4f}"
                         )
                         if WANDB_AVAILABLE:
-                            wandb.log({'val/loss': val_loss})
+                            wandb.log({"val/loss": val_loss})
 
                         if val_loss < self.best_val_loss:
                             self.best_val_loss = val_loss
-                            self._save_checkpoint(
-                                self.global_step, val_loss
-                            )
+                            self._save_checkpoint(self.global_step, val_loss)
 
                     # Periodic saving
-                    elif (
-                        self.global_step % config.save_steps == 0
-                    ):
+                    elif self.global_step % config.save_steps == 0:
                         self._save_checkpoint(self.global_step)
 
                 step += 1
@@ -547,8 +484,7 @@ class PretrainTrainer:
         # Final save
         self._save_checkpoint(self.global_step)
         logger.info(
-            f"Pre-training complete! "
-            f"Best val loss: {self.best_val_loss:.4f}"
+            f"Pre-training complete! " f"Best val loss: {self.best_val_loss:.4f}"
         )
 
         if WANDB_AVAILABLE:

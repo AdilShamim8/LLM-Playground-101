@@ -10,13 +10,11 @@ Text generation strategies:
 All strategies support streaming and batch generation.
 """
 
-import math
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Iterator, Optional
 
 import torch
 import torch.nn.functional as F
-from loguru import logger
 
 
 @dataclass
@@ -35,8 +33,8 @@ class GenerationConfig:
     eos_token_id: int = 2
     pad_token_id: int = 0
     bos_token_id: int = 1
-    forced_bos_token_id: Optional[int] = None
-    forced_eos_token_id: Optional[int] = None
+    forced_bos_token_id: int | None = None
+    forced_eos_token_id: int | None = None
     bad_words_ids: list = field(default_factory=list)
     num_return_sequences: int = 1
 
@@ -44,18 +42,14 @@ class GenerationConfig:
 class LogitsProcessor:
     """Base class for logits processors."""
 
-    def __call__(
-        self,
-        input_ids: torch.Tensor,
-        logits: torch.Tensor
-    ) -> torch.Tensor:
+    def __call__(self, input_ids: torch.Tensor, logits: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
 
 class TemperatureScaling(LogitsProcessor):
     """
     Temperature scaling of logits.
-    
+
     T < 1: Sharper distribution (more deterministic)
     T > 1: Flatter distribution (more random)
     T = 1: No change (standard softmax)
@@ -65,11 +59,7 @@ class TemperatureScaling(LogitsProcessor):
         assert temperature > 0
         self.temperature = temperature
 
-    def __call__(
-        self,
-        input_ids: torch.Tensor,
-        logits: torch.Tensor
-    ) -> torch.Tensor:
+    def __call__(self, input_ids: torch.Tensor, logits: torch.Tensor) -> torch.Tensor:
         return logits / self.temperature
 
 
@@ -83,11 +73,7 @@ class RepetitionPenalty(LogitsProcessor):
         assert penalty >= 1.0
         self.penalty = penalty
 
-    def __call__(
-        self,
-        input_ids: torch.Tensor,
-        logits: torch.Tensor
-    ) -> torch.Tensor:
+    def __call__(self, input_ids: torch.Tensor, logits: torch.Tensor) -> torch.Tensor:
         if self.penalty == 1.0:
             return logits
 
@@ -100,11 +86,7 @@ class RepetitionPenalty(LogitsProcessor):
             score = logits[i, unique_ids]
 
             # Divide positive scores, multiply negative
-            score = torch.where(
-                score < 0,
-                score * self.penalty,
-                score / self.penalty
-            )
+            score = torch.where(score < 0, score * self.penalty, score / self.penalty)
             logits[i, unique_ids] = score
 
         return logits
@@ -119,39 +101,28 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     def __init__(self, ngram_size: int):
         self.ngram_size = ngram_size
 
-    def _get_banned_tokens(
-        self,
-        input_ids: torch.Tensor
-    ) -> list[list[int]]:
+    def _get_banned_tokens(self, input_ids: torch.Tensor) -> list[list[int]]:
         batch_banned = []
         for seq in input_ids:
             seq_list = seq.tolist()
             banned = []
             if len(seq_list) >= self.ngram_size:
                 ngrams: dict[tuple, list] = {}
-                for i in range(
-                    len(seq_list) - self.ngram_size + 1
-                ):
-                    ngram = tuple(seq_list[i:i+self.ngram_size-1])
+                for i in range(len(seq_list) - self.ngram_size + 1):
+                    ngram = tuple(seq_list[i : i + self.ngram_size - 1])
                     next_token = seq_list[i + self.ngram_size - 1]
                     ngrams.setdefault(ngram, []).append(next_token)
 
-                current_ngram = tuple(
-                    seq_list[-(self.ngram_size - 1):]
-                )
+                current_ngram = tuple(seq_list[-(self.ngram_size - 1) :])
                 banned = ngrams.get(current_ngram, [])
             batch_banned.append(banned)
         return batch_banned
 
-    def __call__(
-        self,
-        input_ids: torch.Tensor,
-        logits: torch.Tensor
-    ) -> torch.Tensor:
+    def __call__(self, input_ids: torch.Tensor, logits: torch.Tensor) -> torch.Tensor:
         banned = self._get_banned_tokens(input_ids)
         for i, banned_tokens in enumerate(banned):
             for token_id in banned_tokens:
-                logits[i, token_id] = float('-inf')
+                logits[i, token_id] = float("-inf")
         return logits
 
 
@@ -161,40 +132,28 @@ class LogitsProcessorList:
     def __init__(self, processors: list[LogitsProcessor]):
         self.processors = processors
 
-    def __call__(
-        self,
-        input_ids: torch.Tensor,
-        logits: torch.Tensor
-    ) -> torch.Tensor:
+    def __call__(self, input_ids: torch.Tensor, logits: torch.Tensor) -> torch.Tensor:
         for processor in self.processors:
             logits = processor(input_ids, logits)
         return logits
 
 
-def build_logits_processors(
-    config: GenerationConfig
-) -> LogitsProcessorList:
+def build_logits_processors(config: GenerationConfig) -> LogitsProcessorList:
     processors = []
 
     if config.temperature != 1.0:
         processors.append(TemperatureScaling(config.temperature))
 
     if config.repetition_penalty != 1.0:
-        processors.append(
-            RepetitionPenalty(config.repetition_penalty)
-        )
+        processors.append(RepetitionPenalty(config.repetition_penalty))
 
     if config.no_repeat_ngram_size > 0:
-        processors.append(
-            NoRepeatNGramLogitsProcessor(config.no_repeat_ngram_size)
-        )
+        processors.append(NoRepeatNGramLogitsProcessor(config.no_repeat_ngram_size))
 
     return LogitsProcessorList(processors)
 
 
-def top_k_filtering(
-    logits: torch.Tensor, top_k: int
-) -> torch.Tensor:
+def top_k_filtering(logits: torch.Tensor, top_k: int) -> torch.Tensor:
     """
     Keep only top-k logits, set rest to -inf.
     Restricts sampling to the k most likely tokens.
@@ -203,42 +162,34 @@ def top_k_filtering(
         return logits
     values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
     min_values = values[:, -1].unsqueeze(-1)
-    return logits.masked_fill(logits < min_values, float('-inf'))
+    return logits.masked_fill(logits < min_values, float("-inf"))
 
 
-def top_p_filtering(
-    logits: torch.Tensor, top_p: float
-) -> torch.Tensor:
+def top_p_filtering(logits: torch.Tensor, top_p: float) -> torch.Tensor:
     """
     Nucleus sampling: keep smallest set of tokens
     whose cumulative probability >= top_p.
-    
+
     Dynamically adapts vocabulary size based on
     distribution shape — better than fixed top-k.
     """
     if top_p >= 1.0:
         return logits
 
-    sorted_logits, sorted_indices = torch.sort(
-        logits, descending=True
-    )
-    cumulative_probs = torch.cumsum(
-        F.softmax(sorted_logits, dim=-1), dim=-1
-    )
+    sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+    cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
 
     # Remove tokens with cumulative prob above threshold
     # Shift to keep first token above threshold
-    sorted_indices_to_remove = cumulative_probs - F.softmax(
-        sorted_logits, dim=-1
-    ) > top_p
+    sorted_indices_to_remove = (
+        cumulative_probs - F.softmax(sorted_logits, dim=-1) > top_p
+    )
 
-    sorted_logits[sorted_indices_to_remove] = float('-inf')
+    sorted_logits[sorted_indices_to_remove] = float("-inf")
 
     # Scatter back to original indexing
     logits = torch.zeros_like(logits).scatter_(
-        dim=-1,
-        index=sorted_indices,
-        src=sorted_logits
+        dim=-1, index=sorted_indices, src=sorted_logits
     )
     return logits
 
@@ -246,7 +197,7 @@ def top_p_filtering(
 class GreedyDecoder:
     """
     Greedy decoding: always pick the highest probability token.
-    
+
     Pros: Fast, deterministic, no hyperparameters
     Cons: Repetitive, suboptimal for open-ended tasks
     """
@@ -257,11 +208,15 @@ class GreedyDecoder:
     @torch.no_grad()
     def generate(
         self,
-        model: 'GPTModel',
+        model,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        # NOTE: 'model' is intentionally untyped here to avoid a circular
+        # import with models.gpt.GPTModel. At runtime it must be a GPTModel
+        # instance (or any object with a compatible forward() signature).
         from models.attention import KVCache
+
         config = self.config
         device = input_ids.device
 
@@ -288,13 +243,17 @@ class GreedyDecoder:
 
             # Update attention mask
             if attention_mask is not None:
-                attention_mask = torch.cat([
-                    attention_mask,
-                    torch.ones(
-                        (attention_mask.shape[0], 1),
-                        device=device, dtype=attention_mask.dtype
-                    )
-                ], dim=-1)
+                attention_mask = torch.cat(
+                    [
+                        attention_mask,
+                        torch.ones(
+                            (attention_mask.shape[0], 1),
+                            device=device,
+                            dtype=attention_mask.dtype,
+                        ),
+                    ],
+                    dim=-1,
+                )
 
             # Check EOS
             if (next_token == config.eos_token_id).all():
@@ -306,7 +265,7 @@ class GreedyDecoder:
 class SamplingDecoder:
     """
     Sampling-based decoding with top-k, top-p, temperature.
-    
+
     Pipeline:
         logits -> temperature -> top-k -> top-p -> softmax -> sample
     """
@@ -319,9 +278,10 @@ class SamplingDecoder:
         self,
         model,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         from models.attention import KVCache
+
         config = self.config
         device = input_ids.device
 
@@ -356,13 +316,17 @@ class SamplingDecoder:
             generated = torch.cat([generated, next_token], dim=-1)
 
             if attention_mask is not None:
-                attention_mask = torch.cat([
-                    attention_mask,
-                    torch.ones(
-                        (attention_mask.shape[0], 1),
-                        device=device, dtype=attention_mask.dtype
-                    )
-                ], dim=-1)
+                attention_mask = torch.cat(
+                    [
+                        attention_mask,
+                        torch.ones(
+                            (attention_mask.shape[0], 1),
+                            device=device,
+                            dtype=attention_mask.dtype,
+                        ),
+                    ],
+                    dim=-1,
+                )
 
             if (next_token == config.eos_token_id).all():
                 break
@@ -374,10 +338,11 @@ class SamplingDecoder:
         self,
         model,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> Iterator[torch.Tensor]:
         """Streaming generation - yield one token at a time."""
         from models.attention import KVCache
+
         config = self.config
         kv_cache = KVCache()
         processors = build_logits_processors(config)
@@ -420,13 +385,13 @@ class BeamHypothesis:
 class BeamSearchDecoder:
     """
     Beam Search decoding.
-    
+
     Maintains `num_beams` hypotheses in parallel.
     Explores a wider search space than greedy.
-    
+
     Pros: More coherent, better for translation/summarization
     Cons: Slower, can be repetitive for open-ended generation
-    
+
     Score: log P(y|x) / length_penalty
     """
 
@@ -439,28 +404,22 @@ class BeamSearchDecoder:
         self,
         model,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         config = self.config
         device = input_ids.device
         B = input_ids.shape[0]
 
         # Expand input for beams: (B*num_beams, S)
-        input_ids_beam = input_ids.repeat_interleave(
-            self.num_beams, dim=0
-        )
+        input_ids_beam = input_ids.repeat_interleave(self.num_beams, dim=0)
 
         # Beam scores: (B, num_beams)
-        beam_scores = torch.full(
-            (B, self.num_beams), float('-inf'), device=device
-        )
+        beam_scores = torch.full((B, self.num_beams), float("-inf"), device=device)
         beam_scores[:, 0] = 0.0
         beam_scores = beam_scores.view(-1)
 
         generated = input_ids_beam.clone()
-        done_beams: list[list[BeamHypothesis]] = [
-            [] for _ in range(B)
-        ]
+        done_beams: list[list[BeamHypothesis]] = [[] for _ in range(B)]
         processors = build_logits_processors(config)
 
         for step in range(config.max_new_tokens):
@@ -506,15 +465,12 @@ class BeamSearchDecoder:
 
                     if token_id.item() == config.eos_token_id:
                         length = len(seq)
-                        length_pen = (
-                            (5 + length) ** config.length_penalty
-                            / (5 + 1) ** config.length_penalty
-                        )
+                        length_pen = (5 + length) ** config.length_penalty / (
+                            5 + 1
+                        ) ** config.length_penalty
                         done_beams[batch_idx].append(
                             BeamHypothesis(
-                                token_ids=seq,
-                                score=score / length_pen,
-                                is_done=True
+                                token_ids=seq, score=score / length_pen, is_done=True
                             )
                         )
                     else:
@@ -525,26 +481,20 @@ class BeamSearchDecoder:
 
                 for score, seq in beam_hyps:
                     new_scores.append(score)
-                    new_generated.append(
-                        torch.tensor(seq, device=device)
-                    )
+                    new_generated.append(torch.tensor(seq, device=device))
 
             # Pad and stack
             max_len = max(s.shape[0] for s in new_generated)
-            generated = torch.stack([
-                F.pad(
-                    s, (0, max_len - s.shape[0]),
-                    value=config.pad_token_id
-                )
-                for s in new_generated
-            ])
+            generated = torch.stack(
+                [
+                    F.pad(s, (0, max_len - s.shape[0]), value=config.pad_token_id)
+                    for s in new_generated
+                ]
+            )
             beam_scores = torch.tensor(new_scores, device=device)
 
             # Check early stopping
-            all_done = all(
-                len(done_beams[i]) >= self.num_beams
-                for i in range(B)
-            )
+            all_done = all(len(done_beams[i]) >= self.num_beams for i in range(B))
             if config.beam_search_early_stopping and all_done:
                 break
 
@@ -552,31 +502,26 @@ class BeamSearchDecoder:
         best_sequences = []
         for batch_idx in range(B):
             if done_beams[batch_idx]:
-                best = max(
-                    done_beams[batch_idx],
-                    key=lambda h: h.score
-                )
-                best_sequences.append(
-                    torch.tensor(best.token_ids, device=device)
-                )
+                best = max(done_beams[batch_idx], key=lambda h: h.score)
+                best_sequences.append(torch.tensor(best.token_ids, device=device))
             else:
                 # No completed beam, take best running beam
                 best_score_idx = (
                     batch_idx * self.num_beams
                     + beam_scores[
-                        batch_idx * self.num_beams:
-                        (batch_idx + 1) * self.num_beams
-                    ].argmax().item()
+                        batch_idx * self.num_beams : (batch_idx + 1) * self.num_beams
+                    ]
+                    .argmax()
+                    .item()
                 )
                 best_sequences.append(generated[best_score_idx])
 
         # Pad to same length
         max_len = max(s.shape[0] for s in best_sequences)
-        result = torch.stack([
-            F.pad(
-                s, (0, max_len - s.shape[0]),
-                value=config.pad_token_id
-            )
-            for s in best_sequences
-        ])
+        result = torch.stack(
+            [
+                F.pad(s, (0, max_len - s.shape[0]), value=config.pad_token_id)
+                for s in best_sequences
+            ]
+        )
         return result

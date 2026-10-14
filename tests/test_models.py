@@ -5,10 +5,10 @@ Unit tests for model components.
 import pytest
 import torch
 
-from models.layers import ModelConfig, RMSNorm, RotaryEmbedding, SwiGLU
-from models.attention import MultiHeadAttention, GroupedQueryAttention
-from models.transformer import TransformerBlock
+from models.attention import GroupedQueryAttention, MultiHeadAttention
 from models.gpt import GPTModel
+from models.layers import ModelConfig, RMSNorm, RotaryEmbedding, SwiGLU
+from models.transformer import TransformerBlock
 
 
 @pytest.fixture
@@ -39,9 +39,7 @@ def test_rmsnorm(tiny_config):
 
 
 def test_rotary_embedding(tiny_config):
-    rope = RotaryEmbedding(
-        tiny_config.hidden_size // tiny_config.num_heads
-    )
+    rope = RotaryEmbedding(tiny_config.hidden_size // tiny_config.num_heads)
     B, H, S = 2, tiny_config.num_heads, 10
     D = tiny_config.hidden_size // H
     q = torch.randn(B, H, S, D)
@@ -52,10 +50,7 @@ def test_rotary_embedding(tiny_config):
 
 
 def test_swiglu(tiny_config):
-    ffn = SwiGLU(
-        tiny_config.hidden_size,
-        tiny_config.intermediate_size
-    )
+    ffn = SwiGLU(tiny_config.hidden_size, tiny_config.intermediate_size)
     x = torch.randn(2, 10, tiny_config.hidden_size)
     out = ffn(x)
     assert out.shape == x.shape
@@ -95,12 +90,10 @@ def test_gpt_forward(tiny_config):
 
 def test_gpt_generation(tiny_config):
     from generation.strategies import GenerationConfig, GreedyDecoder
+
     model = GPTModel(tiny_config)
     input_ids = torch.randint(0, tiny_config.vocab_size, (1, 5))
-    config = GenerationConfig(
-        max_new_tokens=10,
-        eos_token_id=tiny_config.eos_token_id
-    )
+    config = GenerationConfig(max_new_tokens=10, eos_token_id=tiny_config.eos_token_id)
     decoder = GreedyDecoder(config)
     output = decoder.generate(model, input_ids)
     assert output.shape[1] > input_ids.shape[1]
@@ -108,9 +101,7 @@ def test_gpt_generation(tiny_config):
 
 def test_weight_tying(tiny_config):
     model = GPTModel(tiny_config)
-    assert model.lm_head.weight is (
-        model.embeddings.token_embedding.weight
-    )
+    assert model.lm_head.weight is (model.embeddings.token_embedding.weight)
 
 
 def test_perplexity(tiny_config):

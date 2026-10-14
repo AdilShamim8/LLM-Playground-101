@@ -7,12 +7,25 @@ Appended to deepseek.py.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional
-from dataclasses import dataclass
 
-from models.layers import RMSNorm
 from models.attention import KVCache
 from models.gpt import GPTOutput
+from models.layers import ModelConfig, RMSNorm
+from models.transformer import TransformerBlock
+
+# Type alias: DeepSeekConfig is just a ModelConfig with architecture="deepseek"
+# In a full implementation this would add MLA/MoE-specific fields, but for
+# the base architecture we reuse ModelConfig to keep the code simple.
+DeepSeekConfig = ModelConfig
+
+
+class DeepSeekBlock(TransformerBlock):
+    """
+    DeepSeek transformer block.
+    Inherits from TransformerBlock — in a full implementation this would
+    add MLA (Multi-head Latent Attention) and MoE (Mixture of Experts).
+    For now it behaves like a standard pre-LN transformer block.
+    """
 
 
 class DeepSeekModel(nn.Module):
@@ -22,23 +35,16 @@ class DeepSeekModel(nn.Module):
     MoE auxiliary losses for load balancing.
     """
 
-    def __init__(self, config: "DeepSeekConfig"):
+    def __init__(self, config: DeepSeekConfig):
         super().__init__()
         self.config = config
 
-        self.embedding = nn.Embedding(
-            config.vocab_size, config.hidden_size
+        self.embedding = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.layers = nn.ModuleList(
+            [DeepSeekBlock(config, layer_idx=i) for i in range(config.num_layers)]
         )
-        self.layers = nn.ModuleList([
-            DeepSeekBlock(config, layer_idx=i)
-            for i in range(config.num_layers)
-        ])
-        self.norm = RMSNorm(
-            config.hidden_size, config.layer_norm_eps
-        )
-        self.lm_head = nn.Linear(
-            config.hidden_size, config.vocab_size, bias=False
-        )
+        self.norm = RMSNorm(config.hidden_size, config.layer_norm_eps)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         if config.tie_word_embeddings:
             self.lm_head.weight = self.embedding.weight
@@ -58,10 +64,10 @@ class DeepSeekModel(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        kv_cache: Optional[KVCache] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        kv_cache: KVCache | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         use_causal_mask: bool = True,
@@ -94,10 +100,7 @@ class DeepSeekModel(nn.Module):
 
             # Accumulate MoE auxiliary loss
             for item in layer_out[1:]:
-                if (
-                    isinstance(item, torch.Tensor)
-                    and item.ndim == 0
-                ):
+                if isinstance(item, torch.Tensor) and item.ndim == 0:
                     total_aux_loss = total_aux_loss + item
 
         x = self.norm(x)
@@ -126,8 +129,5 @@ class DeepSeekModel(nn.Module):
 
     def num_parameters(self, trainable_only: bool = True) -> int:
         if trainable_only:
-            return sum(
-                p.numel() for p in self.parameters()
-                if p.requires_grad
-            )
+            return sum(p.numel() for p in self.parameters() if p.requires_grad)
         return sum(p.numel() for p in self.parameters())
