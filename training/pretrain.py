@@ -19,13 +19,19 @@ import torch
 import torch.nn as nn
 from loguru import logger
 
-# NOTE: 'from torch.cuda.amp import GradScaler, autocast' is DEPRECATED
-# since PyTorch 2.1 and will be removed in a future version.
-# The modern API is:
-#   from torch.amp import GradScaler, autocast
-# GradScaler takes a device string: GradScaler('cuda')
-# autocast takes a device_type kwarg: autocast(device_type='cuda')
-from torch.amp import GradScaler
+# ── Mixed Precision Imports (PyTorch version compatibility) ────────────
+#
+# The GradScaler API changed between PyTorch versions:
+#   PyTorch < 2.1:  torch.cuda.amp.GradScaler()          (CUDA only)
+#   PyTorch 2.1+:   torch.cuda.amp.GradScaler()          (still works, deprecated)
+#   PyTorch 2.4+:   torch.amp.GradScaler('cuda')         (new API, device-agnostic)
+#
+# We try the new import first, then fall back to the old one for older
+# PyTorch versions (like 2.1.0 which is pinned in requirements.txt).
+try:
+    from torch.amp import GradScaler
+except ImportError:
+    from torch.cuda.amp import GradScaler  # type: ignore[no-redef]
 from torch.utils.data import DataLoader, Dataset
 
 try:
@@ -342,9 +348,24 @@ class PretrainTrainer:
             max_lr=config.learning_rate,
         )
 
-        # Gradient scaler for fp16 (prevents underflow in fp16 training)
-        # Modern API: GradScaler('cuda') instead of GradScaler()
-        self.scaler = GradScaler("cuda", enabled=config.fp16)
+        # Gradient scaler for fp16 (prevents underflow in fp16 training).
+        # The GradScaler API differs between PyTorch versions:
+        #   PyTorch < 2.4: GradScaler(enabled=...)  — no device arg
+        #   PyTorch 2.4+:  GradScaler('cuda', enabled=...)  — device arg
+        # We detect which API is available at runtime for compatibility.
+        import inspect
+
+        scaler_kwargs = {"enabled": config.fp16}
+        scaler_sig = inspect.signature(GradScaler.__init__)
+        first_param = (
+            list(scaler_sig.parameters.keys())[0] if scaler_sig.parameters else None
+        )
+        if first_param in ("device", "args"):
+            # New API (PyTorch 2.4+): GradScaler('cuda', enabled=...)
+            self.scaler = GradScaler("cuda", **scaler_kwargs)
+        else:
+            # Old API (PyTorch < 2.4): GradScaler(enabled=...)
+            self.scaler = GradScaler(**scaler_kwargs)
 
         # DataLoaders
         train_loader = DataLoader(
