@@ -1,0 +1,67 @@
+# Monitoring stack — Prometheus + Grafana
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up
+#
+# Access:
+#   Prometheus:  http://localhost:9090
+#   Grafana:      http://localhost:3000 (admin/admin)
+
+version: "3.9"
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: llm-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    networks:
+      - llm_net
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: llm-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - llm_net
+    restart: unless-stopped
+
+  node-exporter:
+    # System-level metrics (CPU, memory, disk, network)
+    image: prom/node-exporter:v1.7.0
+    container_name: llm-node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+    networks:
+      - llm_net
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:

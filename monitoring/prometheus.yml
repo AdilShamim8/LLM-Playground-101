@@ -1,0 +1,33 @@
+# Prometheus configuration for scraping metrics from the LLM Playground API.
+#
+# Prometheus collects metrics from /metrics every 15 seconds and stores
+# them for querying and alerting. Grafana visualizes the collected metrics.
+
+global:
+  scrape_interval: 15s       # How often to scrape targets
+  evaluation_interval: 15s  # How often to evaluate alert rules
+
+scrape_configs:
+  # Scrape the LLM Playground API
+  - job_name: "llm-playground-api"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]
+        labels:
+          service: "api"
+          environment: "production"
+
+  # Scrape Prometheus itself (self-monitoring)
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+# Alert rules (optional — define alerts in separate files)
+rule_files:
+  # - "alerts.yml"
+
+# Alertmanager (optional — for email/Slack/PagerDuty notifications)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
