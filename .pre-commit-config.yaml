@@ -1,0 +1,30 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  .pre-commit-config.yaml — Automated code quality on every commit
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  Install:  pre-commit install
+#  Run manually:  pre-commit run --all-files
+#
+#  This runs ruff (lint + format) and basic checks BEFORE git allows
+#  a commit to be created. Bad code never enters the repo.
+#
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.13
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: requirements-txt-fixer
