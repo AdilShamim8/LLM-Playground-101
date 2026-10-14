@@ -34,31 +34,17 @@ except ImportError:
 #
 # The only exception is DEV_MODE, where a known dev secret is acceptable
 # for local development. In production, DEV_MODE must be false.
+#
+# NOTE: We read env vars at module level but DON'T raise RuntimeError here.
+# Raising at import time breaks 'import api.middleware' in tests and
+# scripts that don't need auth. Validation happens in validate_auth_config()
+# which is called at app startup (api/main.py lifespan).
 
 DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
-if DEV_MODE:
-    # In dev mode only, use a non-secret placeholder.
-    # This NEVER runs in production because we check ENVIRONMENT below.
-    SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-only-not-for-production")
-    if ENVIRONMENT == "production":
-        raise RuntimeError(
-            "FATAL: DEV_MODE=true in production. "
-            "Set DEV_MODE=false and provide JWT_SECRET_KEY."
-        )
-else:
-    SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-    if not SECRET_KEY:
-        raise RuntimeError(
-            "FATAL: JWT_SECRET_KEY environment variable is not set. "
-            'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
-        )
-    if len(SECRET_KEY) < 32:
-        raise RuntimeError(
-            "FATAL: JWT_SECRET_KEY must be at least 32 characters. "
-            "Current length: " + str(len(SECRET_KEY))
-        )
+# Read the key without validating — validate_auth_config() does that at startup
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
 
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(
@@ -68,6 +54,36 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
 # Rate limiting config (per-user, per-window)
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "3600"))
+
+
+def validate_auth_config() -> None:
+    """Validate auth configuration at app startup.
+
+    Called from api/main.py lifespan. Fails fast with a helpful message
+    if the configuration is invalid for the current environment.
+
+    This is NOT done at import time so that 'import api.middleware' works
+    in tests and scripts without setting JWT_SECRET_KEY.
+    """
+    if DEV_MODE:
+        if ENVIRONMENT == "production":
+            raise RuntimeError(
+                "FATAL: DEV_MODE=true in production. "
+                "Set DEV_MODE=false and provide JWT_SECRET_KEY."
+            )
+        return
+
+    if not SECRET_KEY:
+        raise RuntimeError(
+            "FATAL: JWT_SECRET_KEY environment variable is not set. "
+            'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
+        )
+    if len(SECRET_KEY) < 32:
+        raise RuntimeError(
+            f"FATAL: JWT_SECRET_KEY must be at least 32 characters. "
+            f"Current length: {len(SECRET_KEY)}"
+        )
+
 
 security = HTTPBearer(auto_error=False)
 

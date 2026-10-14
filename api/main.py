@@ -68,6 +68,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.error(f"Configuration validation failed:\n{e}")
         raise
 
+    # Validate auth configuration (JWT secret, DEV_MODE checks)
+    from api.middleware.auth import validate_auth_config
+
+    try:
+        validate_auth_config()
+        logger.info("Auth configuration validated")
+    except RuntimeError as e:
+        logger.error(f"Auth configuration failed:\n{e}")
+        raise
+
     app.state.start_time = time.time()
     app.state.request_count = 0
 
