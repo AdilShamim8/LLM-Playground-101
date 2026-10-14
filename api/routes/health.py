@@ -79,7 +79,9 @@ async def detailed_health() -> dict:
     # Check Redis (if configured)
     try:
         import redis
+
         from config.settings import settings
+
         r = redis.from_url(settings.REDIS_URL, socket_timeout=2)
         r.ping()
         checks["redis"] = "healthy"
@@ -89,6 +91,7 @@ async def detailed_health() -> dict:
     # Check model registry
     try:
         from api.routes.chat import ModelRegistry
+
         models = ModelRegistry.list_models()
         checks["models_loaded"] = len(models)
         checks["model_registry"] = "healthy"
@@ -96,10 +99,7 @@ async def detailed_health() -> dict:
         checks["model_registry"] = f"unhealthy: {e}"
 
     # Overall status
-    all_healthy = all(
-        v == "healthy" or isinstance(v, int)
-        for v in checks.values()
-    )
+    all_healthy = all(v == "healthy" or isinstance(v, int) for v in checks.values())
 
     return {
         "status": "healthy" if all_healthy else "degraded",

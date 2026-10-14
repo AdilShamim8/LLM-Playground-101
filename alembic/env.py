@@ -6,9 +6,9 @@ This connects Alembic to our SQLAlchemy models so 'alembic revision
 
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from alembic import context
 from config.settings import settings
 from db.models import Base
 

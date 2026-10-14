@@ -15,7 +15,6 @@ These utilities provide basic sanitization. For production, also add:
 """
 
 import re
-from typing import Optional
 
 
 def sanitize_prompt(text: str, max_length: int = 32000) -> str:
@@ -59,7 +58,7 @@ def sanitize_model_name(name: str) -> str:
     return sanitized
 
 
-def detect_prompt_injection(text: str) -> tuple[bool, Optional[str]]:
+def detect_prompt_injection(text: str) -> tuple[bool, str | None]:
     """Basic prompt injection detection.
 
     Returns (is_injection, reason) tuple. This is a simple heuristic

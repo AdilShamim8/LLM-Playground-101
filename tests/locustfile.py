@@ -49,9 +49,7 @@ class LLMPlaygroundUser(HttpUser):
             "/api/v1/chat/completions",
             json={
                 "model": "llm-playground-7b",
-                "messages": [
-                    {"role": "user", "content": random.choice(prompts)}
-                ],
+                "messages": [{"role": "user", "content": random.choice(prompts)}],
                 "max_tokens": 100,
                 "temperature": 0.7,
                 "stream": False,
@@ -76,9 +74,7 @@ class LLMPlaygroundUser(HttpUser):
             "/api/v1/chat/completions",
             json={
                 "model": "llm-playground-7b",
-                "messages": [
-                    {"role": "user", "content": "Tell me a short joke."}
-                ],
+                "messages": [{"role": "user", "content": "Tell me a short joke."}],
                 "stream": True,
                 "max_tokens": 50,
             },

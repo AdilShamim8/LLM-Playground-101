@@ -12,7 +12,6 @@ This middleware catches ALL unhandled exceptions, logs them with context,
 and returns a clean JSON error response.
 """
 
-import time
 import uuid
 
 from fastapi import Request

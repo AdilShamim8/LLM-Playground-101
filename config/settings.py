@@ -110,9 +110,7 @@ class Settings(BaseSettings):
         if not self.CORS_ORIGINS:
             return []
         return [
-            origin.strip()
-            for origin in self.CORS_ORIGINS.split(",")
-            if origin.strip()
+            origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()
         ]
 
     # ── Validation ──────────────────────────────────────────────────────
@@ -129,9 +127,7 @@ class Settings(BaseSettings):
         errors = []
 
         if self.DEV_MODE:
-            errors.append(
-                "DEV_MODE=true in production. Set DEV_MODE=false."
-            )
+            errors.append("DEV_MODE=true in production. Set DEV_MODE=false.")
 
         if not self.JWT_SECRET_KEY or len(self.JWT_SECRET_KEY) < 32:
             errors.append(

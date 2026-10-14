@@ -91,8 +91,10 @@ def temp_checkpoint(tmp_path, small_model):
 def test_settings():
     """Override settings for testing (DEV_MODE=true, no real secrets)."""
     import os
+
     os.environ["DEV_MODE"] = "true"
     os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only-32chars"
     os.environ["ENVIRONMENT"] = "development"
     from config.settings import Settings
+
     return Settings()

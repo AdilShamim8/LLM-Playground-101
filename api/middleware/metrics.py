@@ -20,7 +20,6 @@ Metrics exposed:
 """
 
 import time
-from typing import Optional
 
 from prometheus_client import (
     CollectorRegistry,
@@ -32,7 +31,6 @@ from prometheus_client import (
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-
 
 # ── Metrics Registry ────────────────────────────────────────────────────
 REGISTRY = CollectorRegistry()
@@ -101,10 +99,7 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
             path = request.url.path
             # Simple normalization: replace numeric segments with :id
             segments = path.split("/")
-            normalized = [
-                ":id" if seg.isdigit() else seg
-                for seg in segments
-            ]
+            normalized = [":id" if seg.isdigit() else seg for seg in segments]
             path = "/".join(normalized)
 
             http_requests_total.labels(

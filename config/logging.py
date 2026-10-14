@@ -63,11 +63,11 @@ def setup_logging() -> None:
             "{message}"
         ),
         level=settings.LOG_LEVEL,
-        rotation="100 MB",       # Rotate when file reaches 100MB
-        retention="30 days",     # Keep logs for 30 days
-        compression="zip",       # Compress rotated logs
+        rotation="100 MB",  # Rotate when file reaches 100MB
+        retention="30 days",  # Keep logs for 30 days
+        compression="zip",  # Compress rotated logs
         backtrace=True,
-        diagnose=False,          # Never show variable values in file logs (security)
+        diagnose=False,  # Never show variable values in file logs (security)
     )
 
     # ── JSON handler for production log aggregation ────────────────────
@@ -75,8 +75,8 @@ def setup_logging() -> None:
         json_log_path = log_path.parent / "app.jsonl"
         logger.add(
             str(json_log_path),
-            serialize=True,       # JSON format for ELK/Datadog/CloudWatch
-            level="INFO",        # Only INFO+ in JSON logs
+            serialize=True,  # JSON format for ELK/Datadog/CloudWatch
+            level="INFO",  # Only INFO+ in JSON logs
             rotation="100 MB",
             retention="30 days",
             compression="zip",

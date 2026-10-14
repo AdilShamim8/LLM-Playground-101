@@ -31,6 +31,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
         # Add to loguru context so all logs include the request ID
         from loguru import logger
+
         with logger.contextualize(request_id=request_id):
             response = await call_next(request)
 

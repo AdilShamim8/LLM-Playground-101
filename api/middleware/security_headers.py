@@ -36,9 +36,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Force HTTPS in production (1 year, include subdomains)
         from config.settings import settings
+
         if settings.ENVIRONMENT == "production":
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains; preload"
-            )
+            response.headers[
+                "Strict-Transport-Security"
+            ] = "max-age=31536000; includeSubDomains; preload"
 
         return response

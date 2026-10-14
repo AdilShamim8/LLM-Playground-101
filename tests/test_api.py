@@ -15,6 +15,7 @@ def client():
     """Create a test client for the FastAPI app."""
     # Set DEV_MODE=true so auth is bypassed in tests
     import os
+
     os.environ["DEV_MODE"] = "true"
     os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only-32chars"
 
@@ -50,9 +51,7 @@ def test_chat_demo_mode(client):
         "/api/v1/chat/completions",
         json={
             "model": "test-model",
-            "messages": [
-                {"role": "user", "content": "Hello!"}
-            ],
+            "messages": [{"role": "user", "content": "Hello!"}],
         },
     )
     assert response.status_code == 200

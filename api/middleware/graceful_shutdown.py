@@ -58,9 +58,7 @@ class GracefulShutdown:
             try:
                 logger.info(f"Cleanup: {name}")
                 if asyncio.iscoroutinefunction(func):
-                    await asyncio.wait_for(
-                        func(), timeout=self.shutdown_timeout
-                    )
+                    await asyncio.wait_for(func(), timeout=self.shutdown_timeout)
                 else:
                     func()
                 logger.info(f"Cleanup complete: {name}")
@@ -78,6 +76,7 @@ def register_signal_handlers(shutdown_handler: GracefulShutdown) -> None:
     In production (Docker/K8s), SIGTERM is sent before SIGKILL.
     This gives the app time to clean up.
     """
+
     def handle_signal(signum, frame):
         signal_name = signal.Signals(signum).name
         logger.info(f"Received {signal_name}, initiating graceful shutdown...")

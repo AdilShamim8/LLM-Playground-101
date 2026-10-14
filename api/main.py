@@ -30,7 +30,8 @@ from api.middleware.request_id import RequestIDMiddleware
 from api.middleware.security_headers import SecurityHeadersMiddleware
 from api.routes.chat import router as chat_router
 from api.routes.evaluation import router as eval_router
-from api.routes.health import router as health_router, set_app_ready
+from api.routes.health import router as health_router
+from api.routes.health import set_app_ready
 from api.routes.models import router as models_router
 
 # ── Application version ─────────────────────────────────────────────────
@@ -62,9 +63,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     try:
         settings.validate_production()
-        logger.info(
-            f"Configuration validated | Environment: {settings.ENVIRONMENT}"
-        )
+        logger.info(f"Configuration validated | Environment: {settings.ENVIRONMENT}")
     except RuntimeError as e:
         logger.error(f"Configuration validation failed:\n{e}")
         raise
@@ -106,11 +105,13 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(PrometheusMiddleware)
 
 # CORS (must be after security middleware so headers aren't stripped)
-from config.settings import settings
+# Import here to avoid circular import with config.logging at module level
+from config.settings import settings  # noqa: E402
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS_LIST or [
+    allow_origins=settings.CORS_ORIGINS_LIST
+    or [
         "http://localhost:7860",
         "http://localhost:3000",
         "http://127.0.0.1:7860",

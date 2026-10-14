@@ -11,6 +11,12 @@ from db.models import (
 )
 
 __all__ = [
-    "APIKey", "Base", "Conversation", "GenerationLog",
-    "Message", "User", "get_db", "init_db",
+    "APIKey",
+    "Base",
+    "Conversation",
+    "GenerationLog",
+    "Message",
+    "User",
+    "get_db",
+    "init_db",
 ]

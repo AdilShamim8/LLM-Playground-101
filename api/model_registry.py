@@ -17,7 +17,6 @@ a Redis-backed registry or a model server like vLLM with Ray Serve.
 
 import threading
 import time
-from typing import Optional
 
 
 class ModelRegistry:
@@ -63,7 +62,7 @@ class ModelRegistry:
             }
 
     @classmethod
-    def get(cls, name: str) -> Optional[dict]:
+    def get(cls, name: str) -> dict | None:
         """Get a registered model's info. Returns None if not found."""
         with cls._lock:
             return cls._models.get(name)

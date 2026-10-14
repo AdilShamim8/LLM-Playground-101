@@ -13,10 +13,8 @@ to multiple workers. These models define the database schema for:
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
 
 from sqlalchemy import (
-    JSON,
     Boolean,
     DateTime,
     Float,
@@ -26,7 +24,13 @@ from sqlalchemy import (
     Text,
     create_engine,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+    sessionmaker,
+)
 
 
 # ── Base class for all models ──────────────────────────────────────────
@@ -35,8 +39,8 @@ class Base(DeclarativeBase):
 
 
 # ── Database engine and session ────────────────────────────────────────
-_engine: Optional[object] = None
-_SessionLocal: Optional[sessionmaker] = None
+_engine: object | None = None
+_SessionLocal: sessionmaker | None = None
 
 
 def init_db(database_url: str) -> None:
@@ -47,10 +51,10 @@ def init_db(database_url: str) -> None:
     global _engine, _SessionLocal
     _engine = create_engine(
         database_url,
-        pool_size=10,           # Connection pool size
-        max_overflow=20,        # Extra connections beyond pool_size
-        pool_pre_ping=True,     # Check connections are alive before use
-        pool_recycle=3600,      # Recycle connections after 1 hour
+        pool_size=10,  # Connection pool size
+        max_overflow=20,  # Extra connections beyond pool_size
+        pool_pre_ping=True,  # Check connections are alive before use
+        pool_recycle=3600,  # Recycle connections after 1 hour
     )
     _SessionLocal = sessionmaker(
         bind=_engine,
@@ -93,7 +97,8 @@ class User(Base):
     )
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(
-        String(20), default="user"  # user | admin
+        String(20),
+        default="user",  # user | admin
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -129,13 +134,14 @@ class APIKey(Base):
         String(255), unique=True, index=True, nullable=False
     )
     name: Mapped[str] = mapped_column(
-        String(100), nullable=False  # User-friendly label like "Production API"
+        String(100),
+        nullable=False,  # User-friendly label like "Production API"
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
-    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="api_keys")
@@ -181,9 +187,11 @@ class Message(Base):
     conversation_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("conversations.id"), nullable=False, index=True
     )
-    role: Mapped[str] = mapped_column(String(20), nullable=False)  # user/assistant/system
+    role: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # user/assistant/system
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
@@ -200,7 +208,7 @@ class GenerationLog(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    user_id: Mapped[Optional[str]] = mapped_column(
+    user_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=True, index=True
     )
     model: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -208,8 +216,8 @@ class GenerationLog(Base):
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     latency_seconds: Mapped[float] = mapped_column(Float, default=0.0)
-    temperature: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    top_p: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    top_p: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
