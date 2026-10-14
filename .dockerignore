@@ -1,0 +1,82 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  .dockerignore — Prevents bloat and secret leaks in Docker images
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  WHY THIS MATTERS:
+#  When Docker builds an image, it sends the ENTIRE build context (your
+#  project directory) to the Docker daemon. Without .dockerignore, this
+#  includes:
+#    - .git/ (can be 100s of MB)
+#    - Model checkpoints (GB)
+#    - Training data (GB)
+#    - .env files (secrets!)
+#    - __pycache__/ and .pyc files
+#    - Virtual environments (thousands of files)
+#
+#  This slows down builds, bloats image layers, and can leak secrets
+#  into the image filesystem (discoverable via 'docker history').
+#
+
+# ─── Version Control ────────────────────────────────────────────────────
+.git
+.gitignore
+.github
+
+# ─── Secrets (NEVER include in image) ────────────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+
+# ─── Model Checkpoints & Data ───────────────────────────────────────────
+checkpoints/
+data/raw/
+data/processed/
+data/tokenized/
+data/split/
+data/sft/
+data/preference/
+tokenizers/
+*.pt
+*.bin
+*.safetensors
+
+# ─── Python Artifacts ───────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# ─── Test & Coverage ────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ─── IDE & Editor ───────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# ─── Logs ───────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ─── Docker ─────────────────────────────────────────────────────────────
+Dockerfile
+docker-compose.yml
+docker-compose.override.yml
+
+# ─── Documentation (not needed in runtime image) ────────────────────────
+docs/
+*.md
+LICENSE
+
+# ─── Misc ───────────────────────────────────────────────────────────────
+.run/
+wandb/
+mlruns/
