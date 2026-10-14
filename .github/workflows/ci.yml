@@ -106,6 +106,8 @@ jobs:
           # CPU-only PyTorch: ~200MB vs ~2GB for CUDA version
           pip install torch==2.1.0 --index-url https://download.pytorch.org/whl/cpu
           pip install pytest pytest-cov pytest-asyncio pyyaml loguru
+          pip install pydantic-settings prometheus-client
+          pip install fastapi httpx python-jose passlib python-multipart
 
       - name: Install package
         run: pip install -e . --no-deps
