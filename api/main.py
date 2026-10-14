@@ -34,7 +34,7 @@ from api.routes.health import router as health_router, set_app_ready
 from api.routes.models import router as models_router
 
 # ── Application version ─────────────────────────────────────────────────
-__version__ = "1.2.0"
+__version__ = "2.0.0"
 
 
 @asynccontextmanager
