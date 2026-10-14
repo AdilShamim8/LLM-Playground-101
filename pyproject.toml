@@ -1,0 +1,118 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  pyproject.toml — Project metadata and tool configuration
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  This file is the modern replacement for setup.py + setup.cfg + .flake8
+#  + .isort.cfg + mypy.ini. It centralizes all Python project config in
+#  one place, as specified by PEP 517/518/621.
+#
+#  Tools configured here:
+#  - build system (setuptools) for pip install -e .
+#  - ruff: fast linter + formatter (replaces flake8 + black + isort)
+#  - mypy: static type checking
+#  - pytest: test configuration
+#
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "llm_playground"
+version = "1.1.0"
+description = "Production-level LLM Playground — end-to-end pipeline from data to deployment"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Adil Shamim", email = "157037615+AdilShamim8@users.noreply.github.com"},
+]
+keywords = ["llm", "transformer", "gpt", "deepseek", "qwen", "gemma", "rlhf", "sft"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "pytest-asyncio>=0.21",
+    "ruff>=0.1.0",
+    "mypy>=1.7",
+    "httpx>=0.25",
+]
+
+[project.urls]
+Homepage = "https://github.com/AdilShamim8/LLM-Playground-101"
+Repository = "https://github.com/AdilShamim8/LLM-Playground-101"
+Documentation = "https://github.com/AdilShamim8/LLM-Playground-101/blob/main/Tutorial%20-101.md"
+Issues = "https://github.com/AdilShamim8/LLM-Playground-101/issues"
+
+[tool.setuptools.packages.find]
+include = ["api*", "data*", "models*", "training*", "generation*", "evaluation*", "ui*"]
+exclude = ["tests*", "docs*", "scripts*"]
+
+# ─── Ruff (Linter + Formatter) ───────────────────────────────────────────
+# Ruff replaces flake8, black, isort, and pyupgrade in one fast tool.
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".venv",
+    "data",
+    "checkpoints",
+]
+
+[tool.ruff.lint]
+# E/W  = pycodestyle errors/warnings
+# F    = pyflakes (unused imports, undefined names)
+# I    = isort (import sorting)
+# UP   = pyupgrade (modernize syntax)
+# B    = flake8-bugbear (common gotchas)
+# SIM  = flake8-simplify (simplify code)
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "E501",  # Line too long — handled by formatter
+    "B008",  # Do not perform function call in argument defaults (FastAPI pattern)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ─── MyPy (Type Checker) ────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = false
+warn_unused_configs = true
+ignore_missing_imports = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+
+# ─── Pytest ──────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "gpu: marks tests that require a GPU",
+]
