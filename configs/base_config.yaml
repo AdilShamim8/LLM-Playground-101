@@ -1,32 +1,56 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  base_config.yaml — Base configuration for LLM Playground
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  Updated October 2026 with current best practices:
+#  - Context windows: 8K minimum (was 2K)
+#  - Vocabulary: 128K for multilingual (was 50K GPT-2 era)
+#  - Architecture: LLaMA-style (RoPE + RMSNorm + SwiGLU + GQA)
+#  - Precision: BF16 default (FP16 is legacy)
+#  - Training: cosine LR + warmup + gradient checkpointing
+#
+
 project:
   name: "llm_playground"
-  version: "1.0.0"
+  version: "2.0.0"
   seed: 42
 
+# ─── Data Pipeline ──────────────────────────────────────────────────────
 data:
   raw_data_dir: "./data/raw"
   processed_data_dir: "./data/processed"
   tokenized_data_dir: "./data/tokenized"
-  max_sequence_length: 2048
-  
+  max_sequence_length: 4096        # 2026 standard: 4K minimum (was 2K)
+
 crawling:
   common_crawl:
     base_url: "https://data.commoncrawl.org"
+    # Use recent crawl snapshots (CC-MAIN-2026-XX for latest data)
+    crawl_id: "CC-MAIN-2025-51"
     num_segments: 5
     max_pages_per_segment: 10000
   web_crawler:
     max_depth: 3
     max_pages: 5000
-    delay: 1.0
-    
+    delay: 1.0                       # Seconds between requests (politeness)
+    respect_robots: true
+
 cleaning:
-  min_length: 100
+  # RefinedWeb / Dolma / FineWeb quality thresholds
+  min_length: 200                   # Characters (was 100 — 2026 standard is stricter)
   max_length: 100000
   min_quality_score: 0.5
   languages: ["en"]
-  
+  # FineWeb-Edu educational scoring (2026 best practice)
+  min_educational_score: 3          # 0-5 scale, 3+ = educational
+  # Deduplication
+  dedup_threshold: 0.85             # MinHash similarity threshold
+  dedup_num_perm: 128               # MinHash permutations
+
 tokenization:
-  vocab_size: 50257
+  # 2026 standard: 128K vocab for multilingual + code
+  # (GPT-2 used 50K, LLaMA-3 uses 128K, Qwen3 uses 151K)
+  vocab_size: 128000                # Was 50257 (GPT-2 era)
   min_frequency: 2
   special_tokens:
     pad_token: "<|pad|>"
@@ -34,16 +58,26 @@ tokenization:
     bos_token: "<|startoftext|>"
     unk_token: "<|unk|>"
 
+# ─── Model Architecture (LLaMA-style, 2026 default) ─────────────────────
 model:
-  architecture: "gpt"
-  hidden_size: 768
-  num_layers: 12
-  num_heads: 12
-  intermediate_size: 3072
-  max_position_embeddings: 2048
-  vocab_size: 50257
-  dropout: 0.1
-  
+  architecture: "gpt"               # gpt | deepseek | qwen | gemma
+  hidden_size: 4096                 # Was 768 (GPT-2 small)
+  num_layers: 32                    # Was 12
+  num_heads: 32                    # Was 12
+  num_kv_heads: 8                  # GQA: 4 queries share 1 KV head (2026 standard)
+  intermediate_size: 11008          # SwiGLU FFN size
+  max_position_embeddings: 8192     # Was 2048 — 2026 minimum is 8K
+  vocab_size: 128000                # Match tokenizer
+  dropout: 0.0                      # 0 for pre-training (2026 practice)
+  attention_dropout: 0.0
+  # Modern architecture features
+  use_rope: true                    # Rotary Position Embeddings
+  use_rmsnorm: true                 # RMSNorm (not LayerNorm)
+  use_swiglu: true                  # SwiGLU FFN (not GeLU)
+  use_gqa: true                     # Grouped Query Attention
+  tie_word_embeddings: false       # Untied (better for large models)
+  rope_theta: 500000.0             # Base frequency (was 10K, 500K for long context)
+
 logging:
   level: "INFO"
   wandb_project: "llm_playground"
