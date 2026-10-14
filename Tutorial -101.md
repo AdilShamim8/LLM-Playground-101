@@ -1,6 +1,7 @@
-# Complete Tutorial Project 1: Build an LLM Playground 
+# Complete Tutorial Project 1: Build an LLM Playground
 
 > ### The Most Beginner-Friendly, End-to-End, Deep Tutorial — DEFINITIVE VERSION
+> ### Last updated: October 14, 2026 (covers GPT-5, Claude 4.5, DeepSeek V4, Qwen3, Gemma 4)
 
 ---
 
@@ -185,12 +186,24 @@ Think of parameters as the **memory cells** of the model.
 - Together, billions of parameters store the "understanding" of language
 
 ```
-GPT-2 (2019):         ~1.5 Billion parameters  (small)
-GPT-3 (2020):         ~175 Billion parameters  (large)
-GPT-4 (2023):         ~1.8 Trillion parameters (estimated, very large)
-LLaMA 3 (2024):       ~70 Billion parameters   (open source, large)
-DeepSeek R1 (2025):   ~671 Billion parameters  (mixture of experts)
+GPT-2 (2019):           ~1.5 Billion params       (small)
+GPT-3 (2020):           ~175 Billion params        (large)
+GPT-4 (2023):           ~1.8 Trillion params       (estimated, MoE)
+LLaMA 3 (2024):         ~70B / 405B params         (open source)
+DeepSeek-V3 (2024):     671B total / 37B active    (MoE — only 5.5% active!)
+Qwen3-235B (2025):      235B total / 22B active    (MoE, open source)
+GPT-5 (2025):           undisclosed, unified reasoning architecture
+Llama 4 Scout (2025):   109B total / 17B active    (10M token context!)
+DeepSeek V4 (2026):     ~1.6 Trillion params       (hybrid attention + MoE)
+Gemma 4 (2026):         26B total / 4B active      (open, world-class)
 ```
+
+**Key insight (2026):** Modern frontier models are almost all **Mixture-of-Experts
+(MoE)**. This means only a fraction of parameters are "active" for any given
+token. DeepSeek-V3 activates only 5.5% of its 671B params per token —
+making it as fast to run as a 37B dense model, but with the knowledge of
+a 671B model. This is why "total params" and "active params" are now both
+reported.
 
 More parameters = more capacity to learn patterns from data.
 
@@ -242,7 +255,7 @@ LLMs do exactly this — at massive scale.
 
 ## 1.4 The Timeline: From Word Models to LLMs
 
-Let me give you context on **how we got here**:
+Let me give you context on **how we got here** (updated October 2026):
 
 ```
 1990s:  N-gram models
@@ -263,7 +276,7 @@ Let me give you context on **how we got here**:
 
 2017:   TRANSFORMERS invented! ← KEY MOMENT
         "Attend to all words at once"
-        Problem: Expensive to train
+        Paper: "Attention Is All You Need" (Vaswani et al.)
 
 2018:   BERT, GPT-1
         "Pre-train on internet text"
@@ -274,16 +287,28 @@ Let me give you context on **how we got here**:
         The world changes
 
 2022:   ChatGPT (GPT-3.5 + RLHF)
-        "AI goes mainstream"
+        "AI goes mainstream" — 100M users in 2 months
 
 2023:   GPT-4, LLaMA, Mistral
-        "Open-source explosion"
+        "Open-source explosion + multimodal"
 
-2024:   LLaMA 3, Gemma, Qwen, Phi
-        "Small powerful models"
+2024:   LLaMA 3, Gemma, Qwen2, DeepSeek-V3, Mixtral
+        "Small powerful models + MoE goes mainstream"
+        DeepSeek-V3: 671B params (37B active) — MoE + MLA
 
-2025:   DeepSeek R1, reasoning models
-        "Chain-of-thought at scale"
+2025:   DeepSeek-R1, GPT-5, Claude 4, Qwen3, Gemma 3, Llama 4
+        "Reasoning models emerge + context windows explode"
+        DeepSeek-R1: RL-trained reasoning, rivals o1
+        GPT-5: unified reasoning architecture (Aug 2025)
+        Llama 4 Scout: 10M token context window!
+        Qwen3: 235B-A22B MoE, hybrid thinking mode
+
+2026:   GPT-5.5/6, Claude 4.5/5, Gemini 3, DeepSeek V4, Gemma 4
+        "Agentic AI + ultra-long context + multimodal native"
+        ChatGPT hits 1 BILLION monthly active users (June 2026)
+        DeepSeek V4: hybrid attention replaces MLA
+        Gemma 4: 26B-A4B MoE, world-class open models
+        GRPO/DAPO/RLVR replace classic RLHF as dominant post-training
 ```
 
 ---
@@ -1954,16 +1979,24 @@ Architecture details: Not disclosed (OpenAI went closed)
 **Why it shocked the world:** It matched GPT-4 quality at a **fraction of the cost**.
 
 ```
-DeepSeek V3 (2024):
-Parameters: 671 billion total (37B active per token)
-Architecture: Mixture of Experts (MoE)
+DeepSeek V3 (Dec 2024):
+Parameters: 671 billion total (37B active per token — only 5.5%!)
+Architecture: Mixture of Experts (MoE) + Multi-head Latent Attention (MLA)
 Training cost: ~$5.5 million (vs OpenAI's hundreds of millions)
 Context window: 128K tokens
 Performance: Matches or beats GPT-4 on many benchmarks!
 
-DeepSeek R1 (2025):
-Type: Reasoning model (like o1)
-Key innovation: Used RL to train reasoning WITHOUT human data
+DeepSeek R1 (Jan 2025):
+Type: Reasoning model (competes with OpenAI o1)
+Key innovation: Used RL (GRPO) to train reasoning WITHOUT human data
+Open weights — rivaling o1 at 1/30th the cost
+
+DeepSeek V4 (May 2026):
+Parameters: ~1.6 Trillion total
+Architecture: HYBRID ATTENTION (replaces MLA with local + long-range design)
+Innovation: mHC (multi-Head Compression), Muon optimizer (from Kimi)
+Context: 1M tokens
+Status: Frontier-class, open weights
 ```
 
 **What is Mixture of Experts (MoE)?**
@@ -1980,7 +2013,7 @@ MIXTURE OF EXPERTS MODEL (MoE):
 Parameters are divided into "expert" groups.
 For each token, ONLY SOME experts activate.
 
-Example DeepSeek:
+Example DeepSeek V3:
 671B total parameters
 37B parameters per token (only 5.5% active!)
 
@@ -1999,19 +2032,30 @@ Hospital with specialists:
 **DeepSeek's Key Technical Innovations:**
 
 ```
-1. Multi-Head Latent Attention (MLA):
-   → Compresses the K and V matrices
-   → Reduces memory usage dramatically
+1. Multi-Head Latent Attention (MLA) — V3:
+   → Compresses the K and V matrices into a low-rank latent space
+   → Reduces KV cache memory by 5-13× vs standard MHA
    → Enables longer context windows efficiently
 
-2. Multi-Token Prediction:
+2. Hybrid Attention — V4 (2026):
+   → Replaces MLA with local + long-range hybrid design
+   → Local layers handle nearby context (fast)
+   → Long-range layers handle distant dependencies (thorough)
+   → Better quality at similar compute
+
+3. Multi-Token Prediction (MTP) — V3:
    → Instead of predicting 1 next token,
      predict multiple tokens simultaneously
    → Trains faster and generalizes better
 
-3. Group Query Attention (GQA):
-   → Share K/V heads across multiple Q heads
-   → Reduces memory, increases speed
+4. Fine-Grained Expert Segmentation:
+   → More small experts instead of fewer big ones
+   → Router can select better-matched experts per token
+   → Better specialization
+
+5. Auxiliary-Loss-Free Load Balancing:
+   → Keeps expert utilization even WITHOUT degrading quality
+   → Previous MoE models used auxiliary loss that hurt performance
 ```
 
 ---
@@ -2028,13 +2072,22 @@ Strong in: Chinese + English bilingual tasks
 Context: Up to 128K tokens
 Innovation: Very strong at code and math
 
-Qwen2.5-Coder:
-→ Specialized coding model
-→ Beats many larger models on coding benchmarks
+Qwen3 (Apr 2025) — MAJOR RELEASE:
+Sizes: Dense (0.6B, 1.7B, 4B, 8B, 14B, 32B) + MoE (30B-A3B, 235B-A22B)
+Architecture: Hybrid thinking mode (model can toggle reasoning on/off)
+Context: 32K native, extends to 128K with YaRN
+Key innovation: "Thinking" vs "non-thinking" modes in one model
+The 235B-A22B: 235B total params, 22B active (MoE)
 
-Qwen2.5-Math:
-→ Specialized math reasoning
-→ Better than GPT-4 on math benchmarks!
+Qwen3-Coder-Next (2025-2026):
+80B total, 3B active per token (MoE)
+Specialized for coding — rivals Claude on SWE-bench
+Optimized for long context (>260K tokens input)
+
+Qwen3.5 / Qwen3.8-Flash (2026):
+Native multimodality (text + image + audio)
+Context: 262K native, extends to 1M with YaRN
+Expanded language coverage (119+ languages)
 ```
 
 **Why Qwen matters:**
@@ -2045,6 +2098,12 @@ Qwen is EQUALLY GOOD in Chinese and English.
 
 For building apps for Asian markets,
 Qwen is often the best choice.
+
+The Qwen3 "thinking mode" is groundbreaking:
+→ Same model can do fast responses (non-thinking)
+→ Or deep reasoning (thinking mode)
+→ User or developer decides which to use
+→ No need for separate models for fast vs. deep
 ```
 
 ---
@@ -2074,9 +2133,18 @@ Key innovations in Gemma 2:
    Larger teacher model helps train smaller student
    → 9B Gemma performs much better than its size suggests
 
-Gemma 3 (2025):
+Gemma 3 (Mar 2025):
 Sizes: 1B, 4B, 12B, 27B
 Multimodal: Can understand images
+Context: 128K tokens (32K for 1B)
+RoPE base frequency increased from 10K to 1M
+
+Gemma 4 (Apr 2026) — LATEST:
+Sizes: 2.3B to 31B (including 26B-A4B MoE variant!)
+Context: 128K (small) / 256K (medium)
+Architecture: MoE variant with 4B active params
+Performance: "World-class" — rivals models 5× its size
+Focus: Advanced reasoning and agentic workflows
 ```
 
 **Why Gemma matters:**
@@ -2087,24 +2155,40 @@ Gemma models are:
 → Very good for deployment in resource-limited settings
 → Full open weights (truly open source)
 → Easy to fine-tune (designed for that)
+
+Gemma 4's MoE variant (26B-A4B) is a 2026 standout:
+→ Only 4B active per token — runs on a single GPU
+→ But has the knowledge capacity of a 26B model
+→ Best cost-performance ratio in its class
 ```
 
 ---
 
-#### Quick Comparison Table
+#### Quick Comparison Table (October 2026)
 
 ```
-┌──────────────┬──────────┬──────────────┬────────────┬──────────────┐
-│ Model Family │ Creator  │ Best At      │ Key Size   │ Open Source? │
-├──────────────┼──────────┼──────────────┼────────────┼──────────────┤
-│ GPT-4        │ OpenAI   │ General      │ ~1.8T MoE  │ No ❌        │
-│ LLaMA 3      │ Meta     │ General      │ 8B-405B    │ Yes ✅       │
-│ DeepSeek V3  │ DeepSeek │ Cost efficient│ 671B MoE  │ Yes ✅       │
-│ Qwen 2.5     │ Alibaba  │ Chinese/Code │ 0.5B-72B   │ Yes ✅       │
-│ Gemma 2      │ Google   │ Small/edge   │ 2B-27B     │ Yes ✅       │
-│ Mistral      │ Mistral  │ European     │ 7B-141B    │ Partial      │
-└──────────────┴──────────┴──────────────┴────────────┴──────────────┘
+┌────────────────┬──────────┬──────────────┬──────────────┬──────────────┐
+│ Model Family   │ Creator  │ Best At      │ Key Size     │ Open Source? │
+├────────────────┼──────────┼──────────────┼──────────────┼──────────────┤
+│ GPT-5/5.5      │ OpenAI   │ General+rea. │ undisclosed  │ No ❌        │
+│ Claude 4.5/5   │ Anthropic│ Coding+safety│ undisclosed  │ No ❌        │
+│ Gemini 3       │ Google   │ Multimodal   │ undisclosed  │ No ❌        │
+│ Llama 4 Scout  │ Meta     │ 10M context  │ 109B-A17B    │ Yes ✅       │
+│ DeepSeek V4    │ DeepSeek │ Cost effic.  │ ~1.6T MoE    │ Yes ✅       │
+│ Qwen3 235B     │ Alibaba  │ CN/Code/rea. │ 235B-A22B    │ Yes ✅       │
+│ Gemma 4        │ Google   │ Small/edge   │ 26B-A4B MoE  │ Yes ✅       │
+│ GLM-5          │ Zhipu    │ Bilingual    │ varies       │ Yes ✅       │
+│ Grok 4         │ xAI      │ Realtime     │ undisclosed  │ Partial      │
+│ Mistral        │ Mistral  │ European     │ 7B-141B      │ Partial      │
+└────────────────┴──────────┴──────────────┴──────────────┴──────────────┘
 ```
+
+**Key 2026 trends:**
+1. **MoE is now the default** for frontier models (>100B)
+2. **Context windows exploded**: 10M tokens (Llama 4 Scout), 1M (DeepSeek V4)
+3. **Reasoning is built-in**: GPT-5, Qwen3, DeepSeek-R1 all have "thinking mode"
+4. **Open weights rival closed models**: DeepSeek V4 and Qwen3 match GPT-5 class
+5. **Multimodal is native**: text + image + audio in one model (Gemini 3, Qwen3.5)
 
 ---
 
@@ -3262,6 +3346,64 @@ RESULT: DeepSeek R1 with strong math/coding reasoning
 
 ---
 
+### The 2026 Post-Training Stack: DAPO and RLVR
+
+By 2026, the post-training landscape shifted dramatically. Classic RLHF with
+human reward models is being **replaced** by verifiable rewards and improved
+RL algorithms. Here's what changed:
+
+```
+THE 2026 POST-TRAINING STACK (in order of adoption):
+
+1. SFT (Supervised Fine-Tuning)
+   → Still the first step — teaches instruction following
+   → Now often uses SYNTHETIC data from stronger models (distillation)
+
+2. RLVR (Reinforcement Learning with Verifiable Rewards)
+   → Replaces human reward model with PROGRAMMATIC verifiers
+   → Math: check if answer is correct
+   → Code: run unit tests
+   → Format: check if JSON parses
+   → NO human labeling needed!
+   → Used by: DeepSeek-R1, Qwen3, GPT-5 (reasoning mode)
+
+3. GRPO (Group Relative Policy Optimization)
+   → DeepSeek's algorithm (see above)
+   → No critic/value model needed
+   → Group-based advantage estimation
+   → Now the DEFAULT RL algorithm for reasoning training
+
+4. DAPO (Decoupled Alignment Policy Optimization)
+   → 2026 improvement over GRPO
+   → Decouples policy and value optimization
+   → More stable training on long reasoning chains
+   → Better for "thinking" models with 10K+ token reasoning traces
+
+5. DPO (Direct Preference Optimization)
+   → Still used for non-verifiable preferences (tone, style, safety)
+   → Cheaper than RL but needs preference data
+   → Often combined with RLVR (DPO for alignment, RLVR for reasoning)
+```
+
+**Why this matters for your LLM Playground:**
+
+```
+If you're building in 2026, the modern training pipeline is:
+
+  Base Model → SFT → RLVR (GRPO/DAPO) → DPO (for safety/alignment)
+
+NOT the 2023 pipeline:
+  Base Model → SFT → RLHF (PPO with human reward model)
+
+The 2026 pipeline is:
+  → Cheaper (no human labelers for reward model)
+  → More reproducible (verifiable rewards are deterministic)
+  → Better at reasoning (RLVR trains actual problem-solving)
+  → Faster to iterate (verifiers give instant feedback)
+```
+
+---
+
 # 📊 PART 4: Evaluation
 
 ---
@@ -3627,14 +3769,21 @@ Answer: C) Paris
 
 SCORING: % of correct answers
 
-RESULTS (as of 2024):
+RESULTS (as of October 2026):
 Random baseline: 25% (4 choices)
 GPT-3 (2020): 43%
 GPT-4 (2023): 87%
 LLaMA 3 70B: 82%
+DeepSeek V3: 88%
+GPT-5: 92%
 Human expert: ~90%
 
-WHY MMLU MATTERS:
+⚠️ CRITICAL UPDATE (2026): MMLU HAS SATURATED!
+→ Frontier models now score 90%+
+→ The benchmark can no longer distinguish top models
+→ MMLU has been REPLACED by MMLU-Pro (see below)
+
+WHY MMLU MATTERS (historically):
 → Tests broad knowledge across domains
 → Hard to "cheat" without real knowledge
 → Multiple choice = easy to score automatically
@@ -3645,6 +3794,33 @@ LIMITATION:
 → Models might pick correct answer for wrong reasons
 → Some questions have been "memorized" during training
    (data contamination problem!)
+→ SATURATED — can't tell GPT-5 from Claude 4.5
+```
+
+---
+
+#### Benchmark 1b: MMLU-Pro (The 2026 Replacement)
+
+```
+WHAT: Enhanced MMLU with 12,000 questions across 14 subjects
+WHY: Original MMLU saturated above 90%
+
+KEY DIFFERENCES from MMLU:
+→ 10 answer options (vs 4) — harder to guess
+→ Graduate-level questions (vs undergraduate)
+→ Requires multi-step reasoning
+→ Reasoning chain matters, not just final answer
+
+RESULTS (October 2026):
+Random baseline: 10% (10 choices)
+GPT-4: 65%
+DeepSeek V3: 75%
+Claude 4.5: 83%
+GPT-5: 86%
+GPT-5.5: 88%
+
+This is now THE standard knowledge benchmark.
+MMLU is only kept for historical comparison.
 ```
 
 ---
@@ -3842,22 +4018,100 @@ LIMITATION:
 
 ---
 
-#### Benchmark 7: MMLU-Pro
+#### Benchmark 7: GPQA Diamond (Graduate-Level Science) — 2026 Critical
 
 ```
-WHAT: Much harder version of MMLU (10 answer choices instead of 4)
-WHY: Standard MMLU is now "solved" by frontier models
+WHAT: 198 PhD-level science questions (biology, chemistry, physics)
+WHY: Tests if models can reason at EXPERT level
 
-Harder because:
-→ 10 choices (vs 4 in original)
-→ Questions require deeper reasoning
-→ Harder to guess correctly
-→ More likely to expose real vs memorized knowledge
+KEY DIFFERENCE from other benchmarks:
+→ Questions written by PhDs in their domain
+→ Even experts with internet access score ~65%
+→ Designed to be hard to Google
+→ Requires deep understanding, not recall
 
-RESULTS:
-LLaMA 3 70B: 56%
-GPT-4: 72%
-Claude 3.5 Sonnet: 78%
+FORMAT: 4 multiple choice, but 3 are plausible "distractors"
+
+RESULTS (October 2026):
+Random baseline: 25%
+Human expert (no internet): 65%
+GPT-4: 50%
+Claude 3.5: 60%
+DeepSeek V3: 68%
+GPT-5: 78%
+Claude 4.5 Opus: 82%
+Gemini 3 Pro: 80%
+
+This is now a key differentiator for frontier models.
+Scores below 70% = not research-grade.
+```
+
+---
+
+#### Benchmark 7b: Humanity's Last Exam (HLE) — The 2026 Frontier
+
+```
+WHAT: ~2,500 graduate-level questions across ALL academic domains
+WHO: Created by Center for AI Safety + Scale AI
+WHY: Designed to be the "final" benchmark before AGI
+
+The premise: "If an AI aces this, it's at expert-human level
+              across virtually every field of knowledge."
+
+KEY STATS:
+→ Questions submitted by 500+ domain experts
+→ Designed to be impossible to answer via search
+→ Requires genuine reasoning + deep knowledge
+→ Average question takes experts 30+ minutes
+
+RESULTS (October 2026):
+Random baseline: ~5%
+Human expert: 70-80%
+GPT-4: 7%
+Claude 3.5: 12%
+GPT-5: 25%
+Claude 4.5 Opus: 38%
+GPT-5.5: 42%
+Gemini 3 Pro: 40%
+
+⚠️ FRONTIER MODELS ARE STILL FAR FROM HUMAN EXPERT LEVEL
+→ This benchmark shows how much room is left
+→ Top AI scores ~40% vs human expert ~75%
+→ Expected to take years to saturate
+```
+
+---
+
+#### Benchmark 7c: SWE-bench Verified (Real Software Engineering) — 2026 Critical
+
+```
+WHAT: 500 real GitHub issues from popular Python repos
+WHY: Tests if AI can do REAL software engineering, not just code snippets
+
+FORMAT:
+1. Given: A real bug report from a GitHub issue
+2. Model must:
+   → Understand the codebase
+   → Locate the bug
+   → Write a fix
+   → Generate a patch (diff)
+3. Evaluated: Run the repo's actual test suite
+
+METRIC: % of issues correctly fixed (tests pass)
+
+RESULTS (October 2026):
+Claude 3.5 Sonnet: 49%
+GPT-4: 22%
+Claude 4 Sonnet: 60%
+DeepSeek V3: 55%
+Claude 4.5 Opus: 72%  ← #1 on leaderboard
+Gemini 3 Pro: 68%
+GPT-5: 65%
+
+⚠️ NOTE: Scores vary 25 percentage points depending on scaffolding
+→ "Scaffolding" = how much tooling the AI gets (file editors, etc.)
+→ Raw model vs agentic harness makes a huge difference
+→ This benchmark measures AGENTIC capability, not just model IQ
 ```
 
 ---
@@ -4065,13 +4319,20 @@ WHY CHATBOT ARENA IS REVOLUTIONARY:
 → Self-correcting (Elo adjusts over time)
 → Covers diverse languages, tasks, use cases
 
-CURRENT LEADERBOARD (early 2025):
-1. GPT-4o (OpenAI): ~1340 Elo
-2. Claude 3.5 Sonnet: ~1330 Elo
-3. Gemini 1.5 Pro: ~1300 Elo
-4. DeepSeek V3: ~1295 Elo
-5. LLaMA 3.1 405B: ~1250 Elo
+CURRENT LEADERBOARD (October 2026):
+1. Claude 4.5 Opus (Anthropic): ~1450 Elo
+2. GPT-5.5 (OpenAI): ~1445 Elo
+3. Gemini 3 Pro (Google): ~1430 Elo
+4. GPT-5 (OpenAI): ~1420 Elo
+5. DeepSeek V4 (DeepSeek): ~1410 Elo
+6. Qwen3 235B (Alibaba): ~1385 Elo
+7. Llama 4 Maverick (Meta): ~1370 Elo
+8. Gemma 4 27B (Google): ~1330 Elo
 (Numbers change constantly as new models release!)
+
+⚠️ KEY 2026 INSIGHT: Open-weight models (DeepSeek V4, Qwen3) now
+match or beat closed models (GPT-5, Claude 4.5) on Chatbot Arena.
+The open-vs-closed gap has essentially CLOSED for general chat quality.
 
 CHATBOT ARENA LIMITATIONS:
 → Biased toward English (most users are English speakers)
@@ -4239,79 +4500,130 @@ This is one of the most active research areas in AI.
 
 ---
 
-# Key Takeaways for Your LLM Playground Project
+# Key Takeaways for Your LLM Playground Project (October 2026)
 
 ```
-1. DATA IS KING
+1. DATA IS KING (STILL TRUE IN 2026)
    The best model architecture fails on bad data.
+   GPT-5's quality comes more from data curation than architecture.
    Invest heavily in understanding data quality.
 
 2. TOKENIZATION AFFECTS EVERYTHING
    Token count = cost, speed, context length.
+   Modern vocab sizes: 128K-256K tokens (multilingual + code).
    Know your tokenizer!
 
-3. TRANSFORMERS = PARALLEL ATTENTION
-   The magic is: every token sees every other token
-   at the same time, with learned importance weights.
+3. TRANSFORMERS = PARALLEL ATTENTION (but evolved)
+   2017: Standard Multi-Head Attention
+   2023: Grouped Query Attention (GQA) — LLaMA 2/3
+   2024: Multi-head Latent Attention (MLA) — DeepSeek V3
+   2026: Hybrid Local + Long-Range — DeepSeek V4
+   The core idea is the same; efficiency has improved 10-100×.
 
-4. GPT-FAMILY = DECODER-ONLY (CAUSAL)
-   Can't look at future tokens during generation.
-   This forces real prediction = real learning.
+4. MoE IS THE 2026 DEFAULT
+   Almost every frontier model >100B params is now MoE.
+   DeepSeek V3: 5.5% active. Gemma 4: 15% active.
+   "Total params" ≠ "active params" — both matter.
 
-5. GENERATION IS A DESIGN CHOICE
+5. CONTEXT WINDOWS EXPLODED
+   2023: 4K-32K was standard
+   2026: 128K is minimum, 1M is common, 10M exists (Llama 4 Scout)
+   This changes what apps can do (entire codebases, books, conversations).
+
+6. REASONING IS BUILT-IN (2026 shift)
+   GPT-5, Qwen3, DeepSeek-R1 all have "thinking mode"
+   Model decides: fast answer OR deep reasoning chain
+   Trained via RLVR (verifiable rewards), not human feedback
+   This is the biggest change since RLHF in 2022.
+
+7. THE MODERN POST-TRAINING STACK (2026)
+   Base → SFT → RLVR (GRPO/DAPO) → DPO (for alignment)
+   NOT: Base → SFT → RLHF (PPO with human reward model)
+   Verifiable rewards replaced human labelers for reasoning.
+
+8. GENERATION IS A DESIGN CHOICE
    Temperature + Top-P dramatically changes output quality.
    This is what you'll tune in your playground!
+   2026: "reasoning_effort" is a new parameter (low/medium/high).
 
-6. SFT TEACHES "WHAT TO DO"
-   RLHF/DPO teaches "how to do it well"
-   Both are needed for a great assistant.
+9. NO SINGLE EVALUATION IS PERFECT
+   Use multiple methods: automated + human + LLM-as-judge.
+   2026 benchmarks: MMLU-Pro, GPQA, HLE, SWE-bench
+   Old MMLU is SATURATED (90%+ for frontier models).
+   Chatbot Arena ELO is the gold standard for chat quality.
 
-7. NO SINGLE EVALUATION IS PERFECT
-   Use multiple methods: automated + human + LLM-as-judge
-   Always ask: "Does this measure what I care about?"
+10. OPEN WEIGHTS NOW RIVAL CLOSED MODELS
+    DeepSeek V4, Qwen3 235B match GPT-5/Claude 4.5 on most benchmarks.
+    The "open vs closed gap" has essentially closed for general use.
+    For your playground: open models are viable for production.
 ```
 
 ---
 
-# Resources for Deep Learning
+# Resources for Deep Learning (Updated October 2026)
 
 ```
-PAPERS (must-read):
-→ "Attention Is All You Need" (2017) - Original Transformer
-→ "Language Models are Few-Shot Learners" (2020) - GPT-3
-→ "Training language models to follow instructions 
-   with human feedback" (2022) - InstructGPT/RLHF
-→ "FineWeb" (2024) - HuggingFace data paper
-→ "DeepSeek-R1" (2025) - Reasoning with RL
+PAPERS (must-read, chronological):
+→ "Attention Is All You Need" (2017) — Original Transformer
+→ "Language Models are Few-Shot Learners" (2020) — GPT-3
+→ "Training language models to follow instructions
+   with human feedback" (2022) — InstructGPT/RLHF
+→ "FineWeb" (2024) — HuggingFace data paper
+→ "DeepSeek-V3 Technical Report" (Dec 2024) — MoE + MLA
+→ "DeepSeek-R1" (Jan 2025) — Reasoning with RL (GRPO)
+→ "Qwen3 Technical Report" (May 2025) — Hybrid thinking mode
+→ "Gemma 3 Technical Report" (Mar 2025) — 128K context, multimodal
+→ "Llama 4 herd" (Apr 2025) — 10M token context, native MoE
+→ "GPT-5 System Card" (Aug 2025) — Unified reasoning architecture
+→ "DeepSeek-V4 Architecture" (May 2026) — Hybrid attention, Muon
+→ "Gemma 4" (Apr 2026) — Open MoE, world-class small models
+→ "DAPO: Decoupled Alignment Policy Optimization" (2026) — RL frontier
 
-INTERACTIVE TOOLS:
-→ tokenize.openai.com (visualize tokenization)
-→ chat.lmsys.org (Chatbot Arena leaderboard)
-→ huggingface.co/spaces/open-llm-leaderboard (benchmarks)
+INTERACTIVE TOOLS (2026):
+→ tokenizer.openai.com (visualize tokenization)
+→ chat.lmsys.org (Chatbot Arena leaderboard — THE gold standard)
+→ huggingface.co/spaces/open-llm-leaderboard (open model benchmarks)
+→ artificialanalysis.ai (model comparison + pricing)
+→ scale.com/leaderboard (frontier model benchmarks)
 
 BOOKS:
-→ "Speech and Language Processing" - Jurafsky & Martin
+→ "Speech and Language Processing" — Jurafsky & Martin
    (Free online, chapter on language models)
+→ "Build a Large Language Model (From Scratch)" — Sebastian Raschka (2024)
 
 VIDEOS:
 → Andrej Karpathy: "Let's build GPT from scratch" (YouTube)
    Best hands-on explanation ever made
 → Andrej Karpathy: "Neural Networks: Zero to Hero"
+→ 3Blue1Brown: "But what is a GPT?" series
 
 COURSES:
-→ fast.ai - Practical Deep Learning
-→ deeplearning.ai - LLM courses
-→ HuggingFace courses (free)
+→ fast.ai — Practical Deep Learning
+→ deeplearning.ai — LLM courses (Andrew Ng)
+→ HuggingFace courses (free, covers 2026 stack)
+→ Sebastian Raschka's LLM course (rasbt/LLMs-from-scratch on GitHub)
 
 BLOGS:
 → The Gradient (thegradient.pub)
 → Lilian Weng's blog (lilianweng.github.io)
-→ Sebastian Ruder's blog
+→ Sebastian Raschka's blog (magazine.sebastianraschka.com)
+→ HuggingFace blog (huggingface.co/blog)
+
+KEY 2026 LEADERBOARDS TO TRACK:
+→ Chatbot Arena (chat.lmsys.org) — ELO from real user votes
+→ SWE-bench Leaderboard — real software engineering
+→ MMLU-Pro Leaderboard — graduate-level knowledge
+→ Humanity's Last Exam — the frontier benchmark
+→ Artificial Analysis — cost/performance ratios
 ```
 
 ---
 
 **This completes the full theory tutorial for your LLM Playground project.**
+
+*Last updated: October 14, 2026. This tutorial is refreshed periodically
+to reflect the rapidly evolving LLM landscape. For the latest model
+benchmarks, always check the live leaderboards linked above.*
 
 Every concept you need to understand — from raw web crawling to human evaluation leaderboards — is covered here from first principles.
 
