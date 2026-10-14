@@ -140,6 +140,27 @@ LitGPT) or implement only one piece of the puzzle. This project is different:
 | Production UI | ✅ | ❌ | ❌ | ❌ |
 | Fully documented | ✅ | partial | ✅ | partial |
 
+### Production Infrastructure
+
+This isn't just a tutorial — it's built with production-grade infrastructure:
+
+| Component | Status | Purpose |
+|-----------|--------|---------|
+| **CI/CD** | ✅ GitHub Actions | Lint (ruff) + type-check (mypy) + 46 tests on every push |
+| **Security** | ✅ Hardened | JWT auth, security headers, non-root Docker, `torch.load(weights_only=True)` |
+| **Observability** | ✅ Prometheus | Metrics at `/metrics`, Grafana dashboards, structured JSON logging |
+| **Configuration** | ✅ Pydantic Settings | Typed env vars with fail-fast validation for production |
+| **Database** | ✅ SQLAlchemy + Alembic | User/API key/conversation models with migrations |
+| **Deployment** | ✅ Docker + K8s | docker-compose for dev, K8s manifests for prod |
+| **Load Balancing** | ✅ Nginx | Reverse proxy with rate limiting, SSE support, TLS termination |
+| **Backup** | ✅ Automated | PostgreSQL backup script with S3 upload + retention |
+| **Load Testing** | ✅ Locust | Performance validation under concurrent load |
+| **Documentation** | ✅ Comprehensive | Architecture, Security, Development, API Reference, Deployment guides |
+
+> 📖 **[System Architecture](docs/ARCHITECTURE.md)** — full design for 100-200M MAU scale
+> 🔒 **[Security Policy](docs/SECURITY.md)** — vulnerability reporting + hardening checklist
+> 🚀 **[Deployment Guide](docs/PRODUCTION_DEPLOYMENT.md)** — cost analysis + 8-phase migration
+
 ---
 
 ## System Requirements
