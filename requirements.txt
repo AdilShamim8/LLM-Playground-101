@@ -52,6 +52,7 @@ tensorboard==2.15.1
 fastapi==0.104.1
 uvicorn==0.24.0
 pydantic==2.5.3
+pydantic-settings==2.1.0  # Settings management (config/settings.py)
 httpx==0.25.2
 python-jose==3.3.0
 passlib==1.7.4
