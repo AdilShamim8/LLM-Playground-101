@@ -1,32 +1,116 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  training_config.yaml — Training hyperparameters
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  Updated October 2026 with current best practices:
+#  - BF16 instead of FP16 (better numerical stability)
+#  - Lower learning rates for large models
+#  - Added GRPO/DAPO config (2026 post-training stack)
+#  - Added gradient clipping (standard practice)
+#  - Added AdamW betas tuned for LLMs (β2=0.95, not 0.999)
+#
+
+# ─── Pre-Training ──────────────────────────────────────────────────────
 pretraining:
+  # Batch size (effective batch = batch_size × grad_accum × num_gpus)
   batch_size: 32
-  gradient_accumulation_steps: 8
-  learning_rate: 3.0e-4
+  gradient_accumulation_steps: 8     # Effective batch = 256
+  learning_rate: 3.0e-4              # 3e-4 standard for <1B params
+  # For larger models, use: 1.5e-4 (1-10B), 6e-5 (10-70B)
+  min_lr: 3.0e-5                     # 10× decay (cosine schedule)
   weight_decay: 0.1
-  warmup_steps: 2000
+  # AdamW betas tuned for LLMs (β2=0.95, not default 0.999)
+  adam_beta1: 0.9
+  adam_beta2: 0.95
+  adam_eps: 1.0e-8
+  # Training schedule
+  warmup_steps: 2000                 # ~0.1-1% of total steps
   max_steps: 100000
   save_steps: 5000
   eval_steps: 1000
-  fp16: true
+  log_steps: 10
+  # Precision: BF16 preferred over FP16 (2026 standard)
+  bf16: true                          # Was fp16: true (BF16 is more stable)
+  fp16: false
+  # Memory optimization
   gradient_checkpointing: true
-  
+  max_grad_norm: 1.0                 # Gradient clipping (prevents explosions)
+
+# ─── Supervised Fine-Tuning (SFT) ───────────────────────────────────────
 sft:
   batch_size: 16
-  learning_rate: 2.0e-5
+  gradient_accumulation_steps: 4     # Effective batch = 64
+  learning_rate: 2.0e-5              # 10× lower than pre-training
   num_epochs: 3
-  max_length: 2048
-  
+  max_length: 4096                   # Was 2048 → 4096 (2026 standard)
+  warmup_ratio: 0.03                # 3% of total steps
+  weight_decay: 0.0                 # No weight decay in SFT
+  bf16: true
+  # LoRA config (parameter-efficient fine-tuning)
+  use_lora: true
+  lora_r: 16                         # Rank
+  lora_alpha: 32                     # Scaling = alpha/r = 2.0
+  lora_dropout: 0.05
+  lora_target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "out_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+# ─── RLHF / Post-Training (2026 Stack) ──────────────────────────────────
 rlhf:
+  # ── Reward Model (Bradley-Terry preference training) ──
   reward_model:
     learning_rate: 1.0e-5
     batch_size: 8
     num_epochs: 1
+    max_length: 4096
+
+  # ── PPO (Classic RLHF — 2023-2024 approach) ──
   ppo:
     learning_rate: 1.4e-5
     batch_size: 128
-    ppo_epochs: 4
-    gamma: 1.0
-    lam: 0.95
+    ppo_epochs: 4                    # Inner optimization epochs
+    gamma: 1.0                       # Discount factor (1.0 for language)
+    lam: 0.95                        # GAE lambda
+    clip_range: 0.2                  # PPO epsilon
+    vf_coef: 0.1                     # Value loss weight
+    kl_coef: 0.1                     # KL penalty coefficient
+    target_kl: 6.0                   # Target KL for adaptive control
+    max_new_tokens: 256
+    normalize_rewards: true
+    reward_clip: 10.0
+
+  # ── GRPO (2025-2026 standard — DeepSeek's innovation) ──
+  # Replaces PPO for reasoning training. No critic/value model needed.
+  grpo:
+    learning_rate: 1.0e-6
+    batch_size: 64
+    num_generations: 8               # Generate 8 responses per prompt
+    group_size: 8                    # Group for relative advantage
+    max_new_tokens: 1024             # Longer for reasoning chains
+    temperature: 1.0
     clip_range: 0.2
-    vf_coef: 0.1
-    kl_coef: 0.1
+    kl_coef: 0.001                  # Lower than PPO (GRPO is more stable)
+    beta: 0.04                       # KL penalty strength
+
+  # ── DAPO (2026 improvement over GRPO) ──
+  # Decoupled alignment — better for long reasoning chains (10K+ tokens)
+  dapo:
+    learning_rate: 5.0e-7
+    batch_size: 32
+    max_new_tokens: 8192             # Very long for deep reasoning
+    clip_range_high: 0.2            # Standard PPO clip
+    clip_range_low: 0.2             # Decoupled low clip (DAPO innovation)
+    dynamic_sampling: true           # Adjust batch based on difficulty
+
+  # ── DPO (Direct Preference Optimization — simpler than RL) ──
+  dpo:
+    learning_rate: 5.0e-7
+    batch_size: 32
+    beta: 0.1                        # KL strength
+    max_length: 4096
+    num_epochs: 1
