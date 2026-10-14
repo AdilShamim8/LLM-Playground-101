@@ -320,9 +320,22 @@ class GPTModel(nn.Module):
             config_dict = json.load(f)
         config = ModelConfig(**config_dict)
         model = cls(config)
+
+        # SECURITY: weights_only=True prevents arbitrary code execution.
+        #
+        # torch.load uses Python's pickle protocol by default, which can
+        # execute arbitrary code embedded in the checkpoint file. A
+        # malicious checkpoint could take over the machine that loads it.
+        #
+        # weights_only=True restricts deserialization to tensor data only,
+        # blocking any code execution. This is the default in PyTorch 2.6+,
+        # but we set it explicitly for safety on older versions.
+        #
+        # See: https://github.com/pytorch/pytorch/security/advisories/GH-7wpm-9w9m
         state_dict = torch.load(
             f'{load_dir}/model.pt',
-            map_location=map_location
+            map_location=map_location,
+            weights_only=True,  # Block pickle code execution
         )
         model.load_state_dict(state_dict)
         return model

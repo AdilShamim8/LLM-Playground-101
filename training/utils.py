@@ -283,9 +283,14 @@ def load_training_state(
         )
 
     # Load model weights
+    # SECURITY: weights_only=True blocks pickle code execution
     model_path = os.path.join(checkpoint_dir, "model.pt")
     if os.path.exists(model_path):
-        state_dict = torch.load(model_path, map_location=map_location)
+        state_dict = torch.load(
+            model_path,
+            map_location=map_location,
+            weights_only=True,  # Block arbitrary code execution
+        )
         model.load_state_dict(state_dict)
         logger.info(f"Model loaded from {model_path}")
     elif hasattr(model, "from_pretrained"):
@@ -295,7 +300,28 @@ def load_training_state(
         logger.info(f"Model loaded via from_pretrained")
 
     # Load optimizer/scheduler state
-    state = torch.load(state_path, map_location=map_location)
+    # NOTE: Trainer state may contain non-tensor objects (optimizer state dicts
+    # with custom types). weights_only=True may fail here. We use it anyway
+    # for safety — if it breaks, the checkpoint format needs updating.
+    try:
+        state = torch.load(
+            state_path,
+            map_location=map_location,
+            weights_only=True,
+        )
+    except Exception:
+        # Fallback for older checkpoints that contain pickled objects.
+        # Log a warning so ops knows this checkpoint is untrusted.
+        logger.warning(
+            f"Falling back to weights_only=False for {state_path}. "
+            "This checkpoint may contain untrusted pickle data. "
+            "Re-save with a modern format to enable safe loading."
+        )
+        state = torch.load(
+            state_path,
+            map_location=map_location,
+            weights_only=False,
+        )
 
     if optimizer and "optimizer" in state:
         optimizer.load_state_dict(state["optimizer"])
